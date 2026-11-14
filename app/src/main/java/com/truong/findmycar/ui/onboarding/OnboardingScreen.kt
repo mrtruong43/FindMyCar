@@ -52,6 +52,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.truong.findmycar.R
+import com.truong.findmycar.detect.ActivityTransitionManager
 import com.truong.findmycar.ui.components.BatteryOptimizationCard
 import com.truong.findmycar.util.Permissions
 
@@ -95,7 +96,12 @@ fun OnboardingScreen(
 
     val singlePermLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { refreshStates() }
+    ) {
+        refreshStates()
+        if (Permissions.hasActivityRecognition(context)) {
+            ActivityTransitionManager.register(context)
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

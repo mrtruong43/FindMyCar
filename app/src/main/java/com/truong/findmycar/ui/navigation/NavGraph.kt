@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -64,7 +65,11 @@ private object Routes {
 }
 
 @Composable
-fun FindMyCarNavHost(container: AppContainer) {
+fun FindMyCarNavHost(
+    container: AppContainer,
+    pendingDetailSpotId: Long? = null,
+    onPendingDetailConsumed: () -> Unit = {}
+) {
     var startDestination by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -84,6 +89,15 @@ fun FindMyCarNavHost(container: AppContainer) {
 
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(pendingDetailSpotId) {
+        if (pendingDetailSpotId != null && pendingDetailSpotId > 0L) {
+            navController.navigate(Routes.detail(pendingDetailSpotId)) {
+                launchSingleTop = true
+            }
+            onPendingDetailConsumed()
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -175,8 +189,9 @@ fun FindMyCarNavHost(container: AppContainer) {
         }
 
         composable(Routes.SETTINGS) {
+            val context = LocalContext.current
             val vm: SettingsViewModel = viewModel(
-                factory = SettingsViewModel.Factory(container.settingsStore)
+                factory = SettingsViewModel.Factory(context, container.settingsStore)
             )
             SettingsScreen(
                 viewModel = vm,

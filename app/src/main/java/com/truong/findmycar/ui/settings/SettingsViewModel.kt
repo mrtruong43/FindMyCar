@@ -1,16 +1,19 @@
 package com.truong.findmycar.ui.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.truong.findmycar.data.AppSettings
 import com.truong.findmycar.data.SettingsStore
+import com.truong.findmycar.detect.ActivityTransitionManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
+    private val appContext: Context,
     private val settingsStore: SettingsStore
 ) : ViewModel() {
 
@@ -21,7 +24,14 @@ class SettingsViewModel(
     )
 
     fun setAutoDetectEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsStore.setAutoDetectEnabled(enabled) }
+        viewModelScope.launch {
+            settingsStore.setAutoDetectEnabled(enabled)
+            if (enabled) {
+                ActivityTransitionManager.register(appContext)
+            } else {
+                ActivityTransitionManager.unregister(appContext)
+            }
+        }
     }
 
     fun setHapticFeedbackEnabled(enabled: Boolean) {
@@ -37,11 +47,12 @@ class SettingsViewModel(
     }
 
     class Factory(
+        private val context: Context,
         private val settingsStore: SettingsStore
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SettingsViewModel(settingsStore) as T
+            return SettingsViewModel(context.applicationContext, settingsStore) as T
         }
     }
 }

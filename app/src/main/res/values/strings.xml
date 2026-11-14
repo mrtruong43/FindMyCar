@@ -16,6 +16,13 @@
     <string name="home_pressure_saved">Cùng tầng</string>
     <string name="home_spot_saved_toast">Đã lưu vị trí xe</string>
     <string name="home_spot_saved_no_gps_toast">Đã lưu xe (không có tín hiệu GPS)</string>
+    <string name="home_spot_duplicate_toast">Vừa mới lưu vị trí xe trước đó</string>
+
+    <!-- Auto-Parking Notification (M3) -->
+    <string name="parking_notif_channel_name">Lưu vị trí xe tự động</string>
+    <string name="parking_notif_channel_desc">Thông báo khi ứng dụng tự động lưu vị trí đỗ xe</string>
+    <string name="parking_notif_title">Đã lưu vị trí xe</string>
+    <string name="parking_notif_text">Đã lưu vị trí xe. Chạm để thêm ghi chú hoặc ảnh.</string>
 
     <!-- Home Tracking Card (M2) -->
     <string name="tracking_card_title">Đang ghi đường đi</string>

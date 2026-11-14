@@ -109,6 +109,12 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         viewModel.saveEvents.collect { result ->
+            if (result.skippedDuplicate) {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.home_spot_duplicate_toast)
+                )
+                return@collect
+            }
             if (Permissions.hasForegroundLocation(context)) {
                 TrackingService.start(context, result.spotId)
             }
