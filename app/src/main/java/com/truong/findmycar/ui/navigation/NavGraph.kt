@@ -42,6 +42,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.truong.findmycar.AppContainer
 import com.truong.findmycar.R
+import com.truong.findmycar.ui.debug.DebugScreen
 import com.truong.findmycar.ui.detail.SpotDetailScreen
 import com.truong.findmycar.ui.detail.SpotDetailViewModel
 import com.truong.findmycar.ui.home.HomeScreen
@@ -59,6 +60,7 @@ private object Routes {
     const val FIND = "find/{spotId}"
     const val HISTORY = "history"
     const val SETTINGS = "settings"
+    const val DEBUG = "debug"
 
     fun detail(spotId: Long) = "detail/$spotId"
     fun find(spotId: Long) = "find/$spotId"
@@ -196,7 +198,14 @@ fun FindMyCarNavHost(
             SettingsScreen(
                 viewModel = vm,
                 onBack = { navController.popBackStack() },
-                onOpenOnboarding = { navController.navigate(Routes.ONBOARDING) }
+                onOpenOnboarding = { navController.navigate(Routes.ONBOARDING) },
+                onOpenDebug = { navController.navigate(Routes.DEBUG) }
+            )
+        }
+
+        composable(Routes.DEBUG) {
+            DebugScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }

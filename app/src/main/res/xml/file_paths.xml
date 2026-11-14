@@ -3,4 +3,7 @@
     <files-path
         name="parking_photos"
         path="photos/" />
+    <cache-path
+        name="debug_logs"
+        path="debug/" />
 </paths>

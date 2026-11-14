@@ -15,7 +15,9 @@ import kotlinx.coroutines.launch
 
 class AppContainer(application: Application) {
     val database: AppDatabase by lazy { AppDatabase.getInstance(application) }
-    val repository: ParkingRepository by lazy { ParkingRepository(database.parkingSpotDao()) }
+    val repository: ParkingRepository by lazy {
+        ParkingRepository(database.parkingSpotDao(), database.trackPointDao())
+    }
     val settingsStore: SettingsStore by lazy { SettingsStore(application) }
     val parkingDetector: ParkingDetector by lazy { ParkingDetector(application, repository) }
 }

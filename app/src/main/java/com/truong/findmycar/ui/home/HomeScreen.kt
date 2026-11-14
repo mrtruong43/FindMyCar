@@ -165,14 +165,14 @@ fun HomeScreen(
                         isSaving = uiState.isSaving,
                         isTracking = uiState.isTracking,
                         trackingElapsedSeconds = uiState.trackingElapsedSeconds,
+                        stepCount = uiState.stepCount,
                         isCompactHeight = isCompactHeight,
                         horizontalPadding = horizontalPadding,
                         onCardClick = { onOpenDetail(spot.id) },
                         onFindClick = { onOpenFind(spot.id) },
                         onOverwriteSaveClick = onRequestSave,
                         onAnchorReachedClick = {
-                            viewModel.markAnchorReached(spot.id)
-                            TrackingService.stop(context)
+                            TrackingService.finalizeAnchor(context)
                         },
                         onStartTrackingTestClick = {
                             if (Permissions.hasForegroundLocation(context)) {
@@ -351,6 +351,7 @@ private fun ActiveHomeContent(
     isSaving: Boolean,
     isTracking: Boolean,
     trackingElapsedSeconds: Long,
+    stepCount: Int,
     isCompactHeight: Boolean,
     horizontalPadding: Dp,
     onCardClick: () -> Unit,
@@ -502,6 +503,7 @@ private fun ActiveHomeContent(
         TrackingStatusCard(
             isTracking = isTracking,
             elapsedSeconds = trackingElapsedSeconds,
+            stepCount = stepCount,
             anchorSet = spot.anchorSet,
             onAnchorReachedClick = onAnchorReachedClick,
             onStartTrackingTestClick = onStartTrackingTestClick
@@ -570,6 +572,7 @@ private fun ActiveHomeContent(
 private fun TrackingStatusCard(
     isTracking: Boolean,
     elapsedSeconds: Long,
+    stepCount: Int,
     anchorSet: Boolean,
     onAnchorReachedClick: () -> Unit,
     onStartTrackingTestClick: () -> Unit
@@ -599,7 +602,8 @@ private fun TrackingStatusCard(
                 )
                 Text(
                     text = stringResource(
-                        R.string.tracking_card_elapsed,
+                        R.string.tracking_card_steps_elapsed,
+                        stepCount,
                         TrackingService.formatDurationMmSs(elapsedSeconds)
                     ),
                     style = MaterialTheme.typography.bodyLarge,

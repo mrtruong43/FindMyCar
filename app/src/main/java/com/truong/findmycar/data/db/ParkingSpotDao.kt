@@ -13,6 +13,9 @@ interface ParkingSpotDao {
     @Query("SELECT * FROM parking_spots WHERE status = 'ACTIVE' ORDER BY savedAt DESC LIMIT 1")
     fun observeActiveSpot(): Flow<ParkingSpotEntity?>
 
+    @Query("SELECT * FROM parking_spots WHERE status = 'ACTIVE' ORDER BY savedAt DESC LIMIT 1")
+    suspend fun getActiveSpotOnce(): ParkingSpotEntity?
+
     @Query("SELECT * FROM parking_spots WHERE id = :id LIMIT 1")
     fun observeSpotById(id: Long): Flow<ParkingSpotEntity?>
 
@@ -45,6 +48,25 @@ interface ParkingSpotDao {
 
     @Query("UPDATE parking_spots SET anchorSet = 1 WHERE id = :spotId")
     suspend fun markAnchorSet(spotId: Long)
+
+    @Query(
+        """
+        UPDATE parking_spots
+        SET anchorSet = 1,
+            anchorLat = :anchorLat,
+            anchorLon = :anchorLon,
+            anchorPressureHpa = :anchorPressureHpa,
+            anchorRelHeightM = :anchorRelHeightM
+        WHERE id = :spotId
+        """
+    )
+    suspend fun finalizeAnchor(
+        spotId: Long,
+        anchorLat: Double?,
+        anchorLon: Double?,
+        anchorPressureHpa: Float?,
+        anchorRelHeightM: Float?
+    )
 
     @Query("DELETE FROM parking_spots WHERE id = :spotId")
     suspend fun deleteById(spotId: Long)

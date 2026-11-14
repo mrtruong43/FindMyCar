@@ -24,9 +24,10 @@
     <string name="parking_notif_title">Đã lưu vị trí xe</string>
     <string name="parking_notif_text">Đã lưu vị trí xe. Chạm để thêm ghi chú hoặc ảnh.</string>
 
-    <!-- Home Tracking Card (M2) -->
+    <!-- Home Tracking Card (M2/M4) -->
     <string name="tracking_card_title">Đang ghi đường đi</string>
     <string name="tracking_card_elapsed">Thời gian ghi: %s</string>
+    <string name="tracking_card_steps_elapsed">%1$d bước • %2$s</string>
     <string name="tracking_anchor_button">Tôi đã tới lối ra/thang máy</string>
     <string name="tracking_anchor_done">Đã chốt lối ra/thang máy</string>
     <string name="tracking_anchor_pending">Chưa chốt lối ra</string>
@@ -117,6 +118,29 @@
     <string name="settings_floor_height">Độ cao mỗi tầng: %.1f m</string>
     <string name="settings_section_permissions">Quyền và pin</string>
     <string name="settings_reopen_onboarding">Xem lại hướng dẫn &amp; cấp quyền</string>
+    <string name="settings_version_format">Phiên bản %s</string>
+    <string name="settings_debug_unlocked">Đã mở màn hình Debug</string>
+
+    <!-- Debug Screen (M4) -->
+    <string name="debug_title">Debug cảm biến</string>
+    <string name="debug_status_label">Trạng thái ghi</string>
+    <string name="debug_status_active">Đang ghi</string>
+    <string name="debug_status_idle">Đang dừng</string>
+    <string name="debug_steps">Số bước</string>
+    <string name="debug_heading">Hướng đi</string>
+    <string name="debug_mode">Chế độ hướng</string>
+    <string name="debug_mode_hand">Cầm tay (La bàn)</string>
+    <string name="debug_mode_pocket">Trong túi (PCA)</string>
+    <string name="debug_pca_ratio">Tỉ lệ PCA</string>
+    <string name="debug_pressure">Áp suất</string>
+    <string name="debug_rel_height">Độ cao tương đối</string>
+    <string name="debug_floor_delta">Chênh lệch tầng</string>
+    <string name="debug_coords">Tọa độ (x, y)</string>
+    <string name="debug_csv_start">Bắt đầu ghi log CSV</string>
+    <string name="debug_csv_stop">Dừng ghi log CSV</string>
+    <string name="debug_csv_export">Xuất file CSV (%d dòng)</string>
+    <string name="debug_csv_empty">Chưa có dữ liệu log để xuất</string>
+    <string name="debug_csv_share_title">Chia sẻ log cảm biến</string>
 
     <!-- Placeholders for M5 / M6 -->
     <string name="placeholder_find_title">Tìm xe</string>

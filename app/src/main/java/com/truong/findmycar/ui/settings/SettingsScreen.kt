@@ -1,6 +1,7 @@
 package com.truong.findmycar.ui.settings
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,6 +47,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.truong.findmycar.BuildConfig
 import com.truong.findmycar.R
 import com.truong.findmycar.ui.components.BatteryOptimizationCard
 import com.truong.findmycar.util.Permissions
@@ -54,11 +57,13 @@ import com.truong.findmycar.util.Permissions
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onBack: () -> Unit,
-    onOpenOnboarding: () -> Unit
+    onOpenOnboarding: () -> Unit,
+    onOpenDebug: () -> Unit
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    var versionTapCount by remember { mutableIntStateOf(0) }
 
     var isIgnoringBattery by remember { mutableStateOf(Permissions.isIgnoringBatteryOptimizations(context)) }
     DisposableEffect(lifecycleOwner) {
@@ -213,6 +218,24 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            Text(
+                text = stringResource(R.string.settings_version_format, BuildConfig.VERSION_NAME),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .clickable {
+                        val next = versionTapCount + 1
+                        if (next >= 7) {
+                            versionTapCount = 0
+                            onOpenDebug()
+                        } else {
+                            versionTapCount = next
+                        }
+                    }
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            )
         }
     }
 }

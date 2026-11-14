@@ -22,7 +22,8 @@ data class HomeUiState(
     val activeSpot: ParkingSpotEntity? = null,
     val isSaving: Boolean = false,
     val isTracking: Boolean = false,
-    val trackingElapsedSeconds: Long = 0L
+    val trackingElapsedSeconds: Long = 0L,
+    val stepCount: Int = 0
 )
 
 class HomeViewModel(
@@ -36,13 +37,15 @@ class HomeViewModel(
         repository.activeSpot,
         isSavingFlow,
         TrackingStateHolder.isTracking,
-        TrackingStateHolder.elapsedSeconds
-    ) { spot, isSaving, isTracking, elapsedSec ->
+        TrackingStateHolder.elapsedSeconds,
+        TrackingStateHolder.telemetry
+    ) { spot, isSaving, isTracking, elapsedSec, telemetry ->
         HomeUiState(
             activeSpot = spot,
             isSaving = isSaving,
             isTracking = isTracking,
-            trackingElapsedSeconds = elapsedSec
+            trackingElapsedSeconds = elapsedSec,
+            stepCount = telemetry.stepCount
         )
     }.stateIn(
         scope = viewModelScope,
