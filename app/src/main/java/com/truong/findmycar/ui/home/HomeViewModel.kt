@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.truong.findmycar.data.ParkingRepository
 import com.truong.findmycar.data.SettingsStore
+import com.truong.findmycar.data.VehicleHologramType
 import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.data.db.TrackPointEntity
 import com.truong.findmycar.detect.ParkingDetector
@@ -48,6 +49,7 @@ data class HomeUiState(
     val barometerNoticeShown: Boolean = false,
     val floorHeightM: Float = 3.2f,
     val selectedEnvironmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO,
+    val vehicleType: VehicleHologramType = VehicleHologramType.SCOOTER,
     val draftFloorTag: String? = null,
     val draftNote: String = "",
     val draftPhotoUri: String? = null
@@ -116,6 +118,7 @@ class HomeViewModel(
             barometerNoticeShown = settings.barometerNoticeShown,
             floorHeightM = settings.floorHeightM,
             selectedEnvironmentMode = selectedMode,
+            vehicleType = settings.vehicleType,
             draftFloorTag = draft.floorTag,
             draftNote = draft.note,
             draftPhotoUri = draft.photoUri

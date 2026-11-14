@@ -271,6 +271,14 @@
     <string name="home_start_exit_footprint_button">Bắt đầu ghi dấu chân lối ra</string>
     <string name="home_edit_exit_anchor_button">Sửa lối ra / thang máy</string>
 
+    <!-- 2.5D Vehicle Hologram & Settings -->
+    <string name="settings_vehicle_type_title">Kiểu phương tiện hiển thị</string>
+    <string name="settings_vehicle_type_desc">Chọn mô hình 2.5D trên radar khi lưu và tìm xe</string>
+    <string name="settings_vehicle_scooter">Xe tay ga</string>
+    <string name="settings_vehicle_car">Ô tô</string>
+    <string name="hologram_stage_ready_cd">Mô hình xe 2.5D sẵn sàng lưu vị trí</string>
+    <string name="hologram_stage_locked_cd">Mô hình xe 2.5D đã khóa vị trí, chạm để xoay 360 độ</string>
+
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>
 </resources>

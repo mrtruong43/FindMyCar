@@ -73,8 +73,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.truong.findmycar.R
 import com.truong.findmycar.guidance.GuidancePhase
-import com.truong.findmycar.ui.components.ArrowCompass
 import com.truong.findmycar.ui.components.FloorBadge
+import com.truong.findmycar.ui.components.HologramStageMode
+import com.truong.findmycar.ui.components.ScooterHologramStage
 import com.truong.findmycar.ui.theme.BentoCardBorder
 import com.truong.findmycar.ui.theme.BentoCardSurface
 import com.truong.findmycar.ui.theme.MintAccent
@@ -239,9 +240,14 @@ fun FindCarScreen(
                             stringResource(R.string.a11y_compass_summary, distIntForA11y, dirForA11y)
                         }
 
-                        ArrowCompass(
+                        val isVeryClose = guidance.phase == GuidancePhase.VERY_CLOSE ||
+                            (guidance.distanceMeters != null && guidance.distanceMeters < 10f)
+                        ScooterHologramStage(
+                            mode = HologramStageMode.GUIDING_TO_VEHICLE,
+                            vehicleType = uiState.vehicleType,
                             relativeArrowDeg = guidance.relativeArrowDeg,
-                            isVeryClose = guidance.phase == GuidancePhase.VERY_CLOSE,
+                            userHeadingDeg = uiState.userHeadingDeg,
+                            isVeryClose = isVeryClose,
                             isLowAccuracy = guidance.isCompassLowAccuracy,
                             modifier = Modifier
                                 .size(compassSize)

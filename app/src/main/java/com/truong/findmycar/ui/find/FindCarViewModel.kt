@@ -21,6 +21,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.truong.findmycar.data.ParkingRepository
 import com.truong.findmycar.data.SettingsStore
+import com.truong.findmycar.data.VehicleHologramType
 import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.guidance.GuidanceEngine
 import com.truong.findmycar.guidance.GuidancePhase
@@ -43,6 +44,8 @@ import kotlin.math.abs
 data class FindCarUiState(
     val spot: ParkingSpotEntity? = null,
     val guidance: GuidanceState = GuidanceState(phase = GuidancePhase.NO_SIGNAL_FALLBACK),
+    val userHeadingDeg: Float = 0f,
+    val vehicleType: VehicleHologramType = VehicleHologramType.SCOOTER,
     val isLoading: Boolean = true
 )
 
@@ -88,6 +91,7 @@ class FindCarViewModel(
                     val azimuthDeg = GeoMath.normalizeAngleDegrees(
                         Math.toDegrees(orientation[0].toDouble()).toFloat()
                     )
+                    _uiState.value = _uiState.value.copy(userHeadingDeg = azimuthDeg)
                     updateGuidanceState(g.onAzimuthUpdate(azimuthDeg))
                 }
                 Sensor.TYPE_STEP_DETECTOR -> {
@@ -145,6 +149,7 @@ class FindCarViewModel(
             _uiState.value = FindCarUiState(
                 spot = spot,
                 guidance = createdEngine.currentState(),
+                vehicleType = settings.vehicleType,
                 isLoading = false
             )
 

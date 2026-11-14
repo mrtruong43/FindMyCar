@@ -104,12 +104,15 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.truong.findmycar.R
+import com.truong.findmycar.data.VehicleHologramType
 import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.detect.ParkingEnvironmentMode
 import com.truong.findmycar.detect.ParkingEnvironmentResolver
 import com.truong.findmycar.tracking.TrackingService
 import com.truong.findmycar.ui.components.EditAnchorBottomSheet
 import com.truong.findmycar.ui.components.FloorBadge
+import com.truong.findmycar.ui.components.HologramStageMode
+import com.truong.findmycar.ui.components.ScooterHologramStage
 import com.truong.findmycar.ui.components.formatElapsedTime
 import com.truong.findmycar.ui.theme.BentoCardBorder
 import com.truong.findmycar.ui.theme.BentoCardSurface
@@ -368,6 +371,7 @@ fun HomeScreen(
                             livePressureHpa = livePressureHpa,
                             autoDetectEnabled = uiState.autoDetectEnabled,
                             selectedEnvironmentMode = uiState.selectedEnvironmentMode,
+                            vehicleType = uiState.vehicleType,
                             draftFloorTag = uiState.draftFloorTag,
                             draftNote = uiState.draftNote,
                             draftPhotoUri = uiState.draftPhotoUri,
@@ -396,6 +400,7 @@ fun HomeScreen(
                             liveFloorDelta = uiState.liveFloorDelta,
                             recordedStepCount = uiState.recordedStepCount,
                             recordedDistanceMeters = uiState.recordedDistanceMeters,
+                            vehicleType = uiState.vehicleType,
                             onCardClick = { onOpenDetail(spot.id) },
                             onFindClick = { onOpenFind(spot.id) },
                             onMarkFoundClick = {
@@ -578,6 +583,7 @@ private fun EmptyHomeBentoLayout(
     livePressureHpa: Float?,
     autoDetectEnabled: Boolean,
     selectedEnvironmentMode: ParkingEnvironmentMode,
+    vehicleType: VehicleHologramType,
     draftFloorTag: String?,
     draftNote: String,
     draftPhotoUri: String?,
@@ -663,6 +669,28 @@ private fun EmptyHomeBentoLayout(
                         pressureHpa = livePressureHpa,
                         autoDetectEnabled = autoDetectEnabled,
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Stage 1: Compact 2.5D Hologram Stage (~130.dp) above quick floor/note controls
+                val stageTint = when (selectedEnvironmentMode) {
+                    ParkingEnvironmentMode.AUTO -> if (isStrongGps) MintAccent else WarningAmber
+                    ParkingEnvironmentMode.UNDERGROUND -> WarningAmber
+                    ParkingEnvironmentMode.OUTDOOR -> MintAccent
+                }
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = BentoCardSurface,
+                    border = BorderStroke(1.dp, BentoCardBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                ) {
+                    ScooterHologramStage(
+                        mode = HologramStageMode.READY_TO_PARK,
+                        vehicleType = vehicleType,
+                        tintColor = stageTint,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
 
@@ -1248,6 +1276,7 @@ private fun ActiveHomeBentoLayout(
     liveFloorDelta: Int,
     recordedStepCount: Int,
     recordedDistanceMeters: Float,
+    vehicleType: VehicleHologramType,
     onCardClick: () -> Unit,
     onFindClick: () -> Unit,
     onMarkFoundClick: () -> Unit,
@@ -1280,13 +1309,16 @@ private fun ActiveHomeBentoLayout(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Top Bento Card ("Thẻ Định Danh Xe")
+        // Top Bento Card ("Thẻ Định Danh Xe") with Stage 2 Hologram
         CarIdentityBentoCard(
             spot = spot,
             parkedTimeStr = parkedTimeStr,
             elapsedSubtitle = formatElapsedTime(context, spot.savedAt, nowMs),
             photoBitmap = photoBitmap,
             isCompactHeight = isCompactHeight,
+            vehicleType = vehicleType,
+            isTracking = isTracking,
+            stepCount = stepCount,
             onCardClick = onCardClick
         )
 
@@ -1408,8 +1440,15 @@ private fun CarIdentityBentoCard(
     elapsedSubtitle: String,
     photoBitmap: Bitmap?,
     isCompactHeight: Boolean,
+    vehicleType: VehicleHologramType,
+    isTracking: Boolean,
+    stepCount: Int,
     onCardClick: () -> Unit
 ) {
+    val envMode = ParkingEnvironmentResolver.fromStorageName(spot.environmentMode)
+    val isUnderground = envMode == ParkingEnvironmentMode.UNDERGROUND || spot.lat == null
+    val stageTint = if (isUnderground) WarningAmber else MintAccent
+
     Surface(
         onClick = onCardClick,
         shape = RoundedCornerShape(24.dp),
@@ -1455,6 +1494,20 @@ private fun CarIdentityBentoCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Stage 2: 2.5D Hologram Lock-down Stage (tap to spin 360°)
+            if (!isCompactHeight) {
+                ScooterHologramStage(
+                    mode = HologramStageMode.PARKED_LOCKED,
+                    vehicleType = vehicleType,
+                    tintColor = stageTint,
+                    stepCount = stepCount,
+                    isTracking = isTracking,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(116.dp)
                 )
             }
 

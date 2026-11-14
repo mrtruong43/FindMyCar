@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.truong.findmycar.data.AppSettings
 import com.truong.findmycar.data.ParkingRepository
 import com.truong.findmycar.data.SettingsStore
+import com.truong.findmycar.data.VehicleHologramType
 import com.truong.findmycar.detect.ActivityTransitionManager
 import com.truong.findmycar.tracking.TrackingService
 import com.truong.findmycar.util.PhotoUtils
@@ -52,6 +53,10 @@ class SettingsViewModel(
 
     fun setCalibratedStepLengthM(stepLengthM: Float?) {
         viewModelScope.launch { settingsStore.setCalibratedStepLengthM(stepLengthM) }
+    }
+
+    fun setVehicleType(type: VehicleHologramType) {
+        viewModelScope.launch { settingsStore.setVehicleType(type) }
     }
 
     fun clearAllData(onDone: () -> Unit) {
