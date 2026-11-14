@@ -45,6 +45,8 @@ import com.truong.findmycar.R
 import com.truong.findmycar.ui.debug.DebugScreen
 import com.truong.findmycar.ui.detail.SpotDetailScreen
 import com.truong.findmycar.ui.detail.SpotDetailViewModel
+import com.truong.findmycar.ui.find.FindCarScreen
+import com.truong.findmycar.ui.find.FindCarViewModel
 import com.truong.findmycar.ui.home.HomeScreen
 import com.truong.findmycar.ui.home.HomeViewModel
 import com.truong.findmycar.ui.onboarding.OnboardingScreen
@@ -176,10 +178,20 @@ fun FindMyCarNavHost(
         composable(
             route = Routes.FIND,
             arguments = listOf(navArgument("spotId") { type = NavType.LongType })
-        ) {
-            PlaceholderScreen(
-                title = stringResource(R.string.placeholder_find_title),
-                onBack = { navController.popBackStack() }
+        ) { backStackEntry ->
+            val spotId = backStackEntry.arguments?.getLong("spotId") ?: return@composable
+            val context = LocalContext.current
+            val vm: FindCarViewModel = viewModel(
+                factory = FindCarViewModel.Factory(
+                    spotId = spotId,
+                    context = context,
+                    repository = container.repository,
+                    settingsStore = container.settingsStore
+                )
+            )
+            FindCarScreen(
+                viewModel = vm,
+                onClose = { navController.popBackStack() }
             )
         }
 

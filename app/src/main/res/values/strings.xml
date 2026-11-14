@@ -142,8 +142,26 @@
     <string name="debug_csv_empty">Chưa có dữ liệu log để xuất</string>
     <string name="debug_csv_share_title">Chia sẻ log cảm biến</string>
 
-    <!-- Placeholders for M5 / M6 -->
-    <string name="placeholder_find_title">Tìm xe</string>
+    <!-- Find Car / Precision Finding (M5) -->
+    <string name="find_close_cd">Đóng</string>
+    <string name="find_floor_same">Đúng tầng</string>
+    <string name="find_floor_up">Lên %d tầng</string>
+    <string name="find_floor_down">Xuống %d tầng</string>
+    <string name="find_status_straight">Đi thẳng</string>
+    <string name="find_status_left">Rẽ trái</string>
+    <string name="find_status_right">Rẽ phải</string>
+    <string name="find_status_turn_around">Quay lại</string>
+    <string name="find_status_weak_signal">Tín hiệu yếu</string>
+    <string name="find_status_calibrate">Vẽ số 8 để hiệu chỉnh</string>
+    <string name="find_status_very_close">Rất gần</string>
+    <string name="find_at_anchor_button">Tôi đang ở lối ra/thang máy</string>
+    <string name="find_notes_photos_button">Ghi chú và ảnh</string>
+    <string name="find_found_button">Đã tìm thấy xe</string>
+    <string name="find_no_signal_title">Không có dữ liệu định vị</string>
+    <string name="find_no_signal_desc">Vị trí này không có GPS và chưa ghi đường đi. Hãy xem ghi chú, ảnh và tầng bên dưới để tìm xe.</string>
+    <string name="find_sheet_no_note">Chưa có ghi chú cho vị trí này.</string>
+
+    <!-- Placeholders for M6 -->
     <string name="placeholder_history_title">Lịch sử đỗ xe</string>
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>
 </resources>

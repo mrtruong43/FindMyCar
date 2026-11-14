@@ -90,4 +90,7 @@ class ParkingRepository(
 
     fun observeTrackPoints(spotId: Long): Flow<List<TrackPointEntity>> =
         trackPointDao.observeBySpotId(spotId)
+
+    suspend fun getTrackPoints(spotId: Long): List<TrackPointEntity> =
+        trackPointDao.getBySpotId(spotId)
 }
