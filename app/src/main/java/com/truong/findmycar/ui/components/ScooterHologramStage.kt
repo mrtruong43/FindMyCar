@@ -75,7 +75,16 @@ enum class HologramStageMode {
     GUIDING_TO_VEHICLE
 }
 
+/**
+ * 3D vehicle-local coordinate:
+ * - x: longitudinal (+x = front, -x = rear)
+ * - y: vertical (+y = up, 0 = ground)
+ * - z: lateral (+z = right, -z = left)
+ */
 private data class Vec3(val x: Float, val y: Float, val z: Float)
+
+private val HologramHighlight = Color(0xFF80FFF0)
+private val HologramCoreWhite = Color(0xFFD8FFF8)
 
 @Composable
 fun ScooterHologramStage(
@@ -342,13 +351,13 @@ fun ScooterHologramStage(
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val minDim = size.minDimension
-            val perspectiveY = 0.48f
+            val perspectiveY = 0.46f
             val baseRadius = minDim * 0.43f * radarZoom *
                 (if (mode == HologramStageMode.PARKED_LOCKED) ringTightenScale.value else 1f)
 
             val floorCenterY = when (mode) {
-                HologramStageMode.GUIDING_TO_VEHICLE -> center.y + minDim * 0.04f
-                else -> center.y + minDim * 0.14f
+                HologramStageMode.GUIDING_TO_VEHICLE -> center.y + minDim * 0.05f
+                else -> center.y + minDim * 0.16f
             }
             val floorCenter = Offset(center.x, floorCenterY)
 
@@ -408,10 +417,10 @@ fun ScooterHologramStage(
                 }
             }
 
-            // Compute vehicle yaw & vertical hover/lock offset
+            // Isometric ~35° yaw for showroom stages; live bearing yaw for GUIDING_TO_VEHICLE
             val vehicleYawDeg = when (mode) {
-                HologramStageMode.READY_TO_PARK -> 42f
-                HologramStageMode.PARKED_LOCKED -> 42f + spinDeg.value
+                HologramStageMode.READY_TO_PARK -> 35f
+                HologramStageMode.PARKED_LOCKED -> 35f + spinDeg.value
                 HologramStageMode.GUIDING_TO_VEHICLE -> animatedArrowDeg
             }
 
@@ -420,22 +429,6 @@ fun ScooterHologramStage(
                 HologramStageMode.PARKED_LOCKED -> lockOffsetDp.value.dp.toPx()
                 HologramStageMode.GUIDING_TO_VEHICLE -> 2.dp.toPx()
             }
-
-            // Soft ambient under-glow shadow on radar floor
-            val shadowRadiusX = baseRadius * 0.42f
-            val shadowRadiusY = shadowRadiusX * perspectiveY * 0.72f
-            drawOval(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        animatedTint.copy(alpha = if (mode == HologramStageMode.READY_TO_PARK) 0.24f else 0.36f),
-                        Color.Transparent
-                    ),
-                    center = floorCenter,
-                    radius = shadowRadiusX
-                ),
-                topLeft = Offset(floorCenter.x - shadowRadiusX, floorCenter.y - shadowRadiusY),
-                size = Size(shadowRadiusX * 2f, shadowRadiusY * 2f)
-            )
 
             // Stage 3: Directional pointer chevron on the floor ahead of the vehicle
             if (mode == HologramStageMode.GUIDING_TO_VEHICLE) {
@@ -448,47 +441,47 @@ fun ScooterHologramStage(
                 )
             }
 
-            // 2. 2.5D Stylized Wireframe (Scooter default or Car)
+            // 2. Volumetric 3D Isometric Vehicle Mesh (Scooter default or Car)
             val vehicleScale = when (mode) {
                 HologramStageMode.GUIDING_TO_VEHICLE -> minDim * 0.21f
-                else -> minDim * 0.28f
+                else -> minDim * 0.27f
             }
             val vehicleOrigin = Offset(floorCenter.x, floorCenter.y - hoverLiftPx)
-            val wireframeAlpha = if (mode == HologramStageMode.READY_TO_PARK) 0.84f else 1.0f
+            val alphaScale = if (mode == HologramStageMode.READY_TO_PARK) 0.88f else 1.0f
 
             if (vehicleType == VehicleHologramType.CAR) {
-                drawCarWireframe25D(
+                drawVolumetricCar3D(
                     origin = vehicleOrigin,
+                    floorOrigin = floorCenter,
                     scale = vehicleScale,
                     yawDeg = vehicleYawDeg,
                     pitchTiltDeg = tiltPitchDeg,
                     rollTiltDeg = tiltRollDeg,
-                    perspectiveY = perspectiveY,
-                    accentColor = animatedTint.copy(alpha = wireframeAlpha),
-                    highlightColor = Color(0xFFD8FFF3).copy(alpha = wireframeAlpha)
+                    accentColor = animatedTint,
+                    alphaScale = alphaScale
                 )
             } else {
-                drawScooterWireframe25D(
+                drawVolumetricScooter3D(
                     origin = vehicleOrigin,
+                    floorOrigin = floorCenter,
                     scale = vehicleScale,
                     yawDeg = vehicleYawDeg,
                     pitchTiltDeg = tiltPitchDeg,
                     rollTiltDeg = tiltRollDeg,
-                    perspectiveY = perspectiveY,
-                    accentColor = animatedTint.copy(alpha = wireframeAlpha),
-                    highlightColor = Color(0xFFD8FFF3).copy(alpha = wireframeAlpha)
+                    accentColor = animatedTint,
+                    alphaScale = alphaScale
                 )
             }
 
             // Stage 2: Single vertical holographic scanline sweep across the vehicle body
             if (mode == HologramStageMode.PARKED_LOCKED && showScanline) {
-                val scanY = vehicleOrigin.y - vehicleScale * 1.15f * (1f - scanlineProgress.value)
-                val scanHalfW = baseRadius * 0.62f
+                val scanY = vehicleOrigin.y - vehicleScale * 1.25f * (1f - scanlineProgress.value)
+                val scanHalfW = baseRadius * 0.64f
                 drawLine(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color(0xFFD8FFF3),
+                            HologramHighlight,
                             animatedTint,
                             Color.Transparent
                         ),
@@ -543,7 +536,6 @@ private fun DrawScope.drawPerspectiveRadarFloor(
         )
     }
 
-    // Radial perspective grid lines (every 45°, rotated by compassRotationDeg)
     for (deg in 0 until 360 step 45) {
         val rad = Math.toRadians((deg + compassRotationDeg).toDouble() - 90.0)
         val innerR = outerRadius * 0.20f
@@ -561,7 +553,6 @@ private fun DrawScope.drawPerspectiveRadarFloor(
         )
     }
 
-    // Cardinal compass tick marks & Vietnamese labels: B (Bắc), Đ (Đông), N (Nam), T (Tây)
     val labelPaint = android.graphics.Paint().apply {
         isAntiAlias = true
         textAlign = android.graphics.Paint.Align.CENTER
@@ -661,82 +652,159 @@ private fun DrawScope.drawBearingPointer(
     drawPath(path = pointerPath, color = accentColor.copy(alpha = 0.35f))
     drawPath(
         path = pointerPath,
-        color = Color(0xFFD8FFF3),
+        color = HologramCoreWhite,
         style = Stroke(width = 1.6.dp.toPx(), join = StrokeJoin.Round)
     )
 }
 
-private fun project25D(
+/**
+ * True 3D isometric projection helper:
+ * - Rotated by [yawDeg] around vertical Y axis
+ * - Projected at ~22° isometric pitch (+ gyroscope tilt)
+ */
+private fun project3D(
     p: Vec3,
     origin: Offset,
     scale: Float,
     yawDeg: Float,
     pitchTiltDeg: Float,
-    rollTiltDeg: Float,
-    perspectiveY: Float
+    rollTiltDeg: Float
 ): Offset {
     val yawRad = Math.toRadians(yawDeg.toDouble())
-    val cosY = cos(yawRad).toFloat()
     val sinY = sin(yawRad).toFloat()
-    val rx = p.x * cosY + p.y * sinY
-    val ry = -p.x * sinY + p.y * cosY
+    val cosY = cos(yawRad).toFloat()
 
-    val rollShift = sin(Math.toRadians(rollTiltDeg.toDouble())).toFloat() * 0.35f
-    val pitchShift = sin(Math.toRadians(pitchTiltDeg.toDouble())).toFloat() * 0.35f
+    // Rotate (x, z) by yaw around vertical Y axis
+    val rx = p.x * sinY + p.z * cosY
+    val rz = p.x * cosY - p.z * sinY
 
-    val sx = origin.x + (rx + p.z * rollShift) * scale
-    val sy = origin.y - p.z * scale * 0.92f - (ry * perspectiveY - p.z * pitchShift) * scale
+    val pitchRad = Math.toRadians((22.0 + pitchTiltDeg * 0.45).coerceIn(10.0, 36.0))
+    val cosP = cos(pitchRad).toFloat()
+    val sinP = sin(pitchRad).toFloat()
+
+    val rollShift = sin(Math.toRadians(rollTiltDeg.toDouble())).toFloat() * 0.32f
+
+    val sx = origin.x + (rx + p.y * rollShift) * scale
+    val sy = origin.y - (p.y * cosP + rz * sinP) * scale
     return Offset(sx, sy)
 }
 
-private fun DrawScope.drawScooterWireframe25D(
+/**
+ * Computes view-space depth (larger = closer to viewer) for simple painter's sorting of ±z sides.
+ */
+private fun depth3D(p: Vec3, yawDeg: Float): Float {
+    val yawRad = Math.toRadians(yawDeg.toDouble())
+    val rz = p.x * cos(yawRad).toFloat() - p.z * sin(yawRad).toFloat()
+    return -rz
+}
+
+private fun DrawScope.drawVolumetricScooter3D(
     origin: Offset,
+    floorOrigin: Offset,
     scale: Float,
     yawDeg: Float,
     pitchTiltDeg: Float,
     rollTiltDeg: Float,
-    perspectiveY: Float,
     accentColor: Color,
-    highlightColor: Color
+    alphaScale: Float
 ) {
-    fun proj(x: Float, y: Float, z: Float): Offset = project25D(
-        Vec3(x, y, z), origin, scale, yawDeg, pitchTiltDeg, rollTiltDeg, perspectiveY
-    )
+    fun p(x: Float, y: Float, z: Float): Offset =
+        project3D(Vec3(x, y, z), origin, scale, yawDeg, pitchTiltDeg, rollTiltDeg)
 
-    fun strokePoly(points: List<Vec3>, color: Color, widthDp: Float, closed: Boolean = false) {
-        if (points.size < 2) return
-        val path = Path().apply {
-            val first = proj(points[0].x, points[0].y, points[0].z)
-            moveTo(first.x, first.y)
-            for (i in 1 until points.size) {
-                val pt = proj(points[i].x, points[i].y, points[i].z)
-                lineTo(pt.x, pt.y)
-            }
-            if (closed) close()
+    fun pFloor(x: Float, z: Float): Offset =
+        project3D(Vec3(x, 0f, z), floorOrigin, scale, yawDeg, pitchTiltDeg, rollTiltDeg)
+
+    fun pathFrom(pts: List<Vec3>, closed: Boolean = false): Path = Path().apply {
+        val first = p(pts[0].x, pts[0].y, pts[0].z)
+        moveTo(first.x, first.y)
+        for (i in 1 until pts.size) {
+            val pt = p(pts[i].x, pts[i].y, pts[i].z)
+            lineTo(pt.x, pt.y)
         }
+        if (closed) close()
+    }
+
+    fun strokePts(pts: List<Vec3>, color: Color, widthDp: Float, closed: Boolean = false) {
         drawPath(
-            path = path,
+            path = pathFrom(pts, closed),
             color = color,
             style = Stroke(width = widthDp.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
     }
 
-    fun drawWheel(centerY: Float, radius: Float) {
-        val segments = 14
-        val pts = (0 until segments).map { i ->
-            val a = (2.0 * PI * i / segments)
-            Vec3(0f, centerY + (radius * cos(a)).toFloat(), radius + (radius * sin(a)).toFloat())
+    fun draw3DWheel(centerX: Float, radius: Float, halfWidth: Float) {
+        val segments = 16
+        val nearSign = if (depth3D(Vec3(centerX, radius, halfWidth), yawDeg) >=
+            depth3D(Vec3(centerX, radius, -halfWidth), yawDeg)
+        ) 1f else -1f
+        val farSign = -nearSign
+
+        val farSide = (0 until segments).map { i ->
+            val a = 2.0 * PI * i / segments
+            Vec3(centerX + (radius * cos(a)).toFloat(), radius + (radius * sin(a)).toFloat(), farSign * halfWidth)
         }
-        strokePoly(pts, accentColor.copy(alpha = 0.95f), 2.1f, closed = true)
-        val hub = proj(0f, centerY, radius)
-        drawCircle(color = accentColor.copy(alpha = 0.32f), radius = scale * radius * 0.55f, center = hub)
-        drawCircle(color = highlightColor, radius = 2.6.dp.toPx(), center = hub)
+        val nearSide = (0 until segments).map { i ->
+            val a = 2.0 * PI * i / segments
+            Vec3(centerX + (radius * cos(a)).toFloat(), radius + (radius * sin(a)).toFloat(), nearSign * halfWidth)
+        }
+
+        // Translucent tire volume fill
+        drawPath(
+            path = pathFrom(farSide, closed = true),
+            color = accentColor.copy(alpha = 0.14f * alphaScale)
+        )
+        strokePts(farSide, accentColor.copy(alpha = 0.45f * alphaScale), 1.0f, closed = true)
+
+        // Tread cross-ribs connecting far & near tire walls
+        for (i in 0 until segments step 2) {
+            strokePts(listOf(farSide[i], nearSide[i]), accentColor.copy(alpha = 0.48f * alphaScale), 0.75f)
+        }
+
+        drawPath(
+            path = pathFrom(nearSide, closed = true),
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    HologramHighlight.copy(alpha = 0.24f * alphaScale),
+                    accentColor.copy(alpha = 0.12f * alphaScale)
+                ),
+                center = p(centerX, radius, nearSign * halfWidth),
+                radius = radius * scale * 1.1f
+            )
+        )
+        strokePts(nearSide, accentColor.copy(alpha = 0.95f * alphaScale), 1.6f, closed = true)
+
+        // Inner glowing rim + hubcap
+        val rimRadius = radius * 0.56f
+        val rimPts = (0 until 12).map { i ->
+            val a = 2.0 * PI * i / 12
+            Vec3(centerX + (rimRadius * cos(a)).toFloat(), radius + (rimRadius * sin(a)).toFloat(), nearSign * halfWidth)
+        }
+        strokePts(rimPts, HologramHighlight.copy(alpha = 0.85f * alphaScale), 1.0f, closed = true)
+        val hub = p(centerX, radius, nearSign * (halfWidth + 0.01f))
+        drawCircle(color = accentColor.copy(alpha = 0.35f * alphaScale), radius = 5.dp.toPx(), center = hub)
+        drawCircle(color = HologramCoreWhite.copy(alpha = alphaScale), radius = 2.3.dp.toPx(), center = hub)
     }
 
-    // Headlight beam cone extending forward (+y)
-    val headOrigin = proj(0f, 0.72f, 0.88f)
-    val beamLeft = proj(-0.34f, 1.55f, 0.05f)
-    val beamRight = proj(0.34f, 1.55f, 0.05f)
+    // Ground ambient shadow directly beneath front & rear tires
+    listOf(0.72f, -0.68f).forEach { wx ->
+        val c = pFloor(wx, 0f)
+        val rx = scale * 0.34f
+        val ry = rx * 0.46f
+        drawOval(
+            brush = Brush.radialGradient(
+                colors = listOf(accentColor.copy(alpha = 0.34f * alphaScale), Color.Transparent),
+                center = c,
+                radius = rx
+            ),
+            topLeft = Offset(c.x - rx, c.y - ry),
+            size = Size(rx * 2f, ry * 2f)
+        )
+    }
+
+    // Soft volumetric headlight beam cone projecting forward onto the radar floor
+    val headOrigin = p(0.74f, 0.96f, 0f)
+    val beamLeft = pFloor(1.62f, -0.34f)
+    val beamRight = pFloor(1.62f, 0.34f)
     val beamPath = Path().apply {
         moveTo(headOrigin.x, headOrigin.y)
         lineTo(beamLeft.x, beamLeft.y)
@@ -746,134 +814,330 @@ private fun DrawScope.drawScooterWireframe25D(
     drawPath(
         path = beamPath,
         brush = Brush.linearGradient(
-            colors = listOf(highlightColor.copy(alpha = 0.28f), Color.Transparent),
+            colors = listOf(HologramHighlight.copy(alpha = 0.28f * alphaScale), Color.Transparent),
             start = headOrigin,
             end = Offset((beamLeft.x + beamRight.x) * 0.5f, (beamLeft.y + beamRight.y) * 0.5f)
         )
     )
 
-    // Front & Rear Wheels
-    drawWheel(centerY = 0.72f, radius = 0.25f)
-    drawWheel(centerY = -0.68f, radius = 0.24f)
+    // Painter order for left (-z) vs right (+z) side cowls
+    val rightFirst = depth3D(Vec3(0f, 0.5f, 0.28f), yawDeg) <
+        depth3D(Vec3(0f, 0.5f, -0.28f), yawDeg)
+    val sideOrder = if (rightFirst) listOf(1f, -1f) else listOf(-1f, 1f)
 
-    // Floorboard & chassis spine
-    strokePoly(
+    // 1. Thick Front & Rear Wheels
+    draw3DWheel(centerX = 0.72f, radius = 0.24f, halfWidth = 0.095f)
+    draw3DWheel(centerX = -0.68f, radius = 0.23f, halfWidth = 0.105f)
+
+    // 2. Flat Step-Through Floorboard (extruded ±z deck)
+    val floorTopPts = listOf(
+        Vec3(0.42f, 0.27f, -0.24f),
+        Vec3(0.42f, 0.27f, 0.24f),
+        Vec3(-0.20f, 0.27f, 0.25f),
+        Vec3(-0.20f, 0.27f, -0.25f)
+    )
+    val floorBottomPts = listOf(
+        Vec3(0.42f, 0.20f, -0.22f),
+        Vec3(0.42f, 0.20f, 0.22f),
+        Vec3(-0.20f, 0.20f, 0.23f),
+        Vec3(-0.20f, 0.20f, -0.23f)
+    )
+    drawPath(
+        path = pathFrom(floorTopPts, closed = true),
+        color = accentColor.copy(alpha = 0.18f * alphaScale)
+    )
+    strokePts(floorBottomPts, accentColor.copy(alpha = 0.55f * alphaScale), 0.9f, closed = true)
+    strokePts(floorTopPts, accentColor.copy(alpha = 0.90f * alphaScale), 1.4f, closed = true)
+    listOf(0.28f, 0.10f, -0.08f).forEach { fx ->
+        strokePts(
+            listOf(Vec3(fx, 0.27f, -0.24f), Vec3(fx, 0.27f, 0.24f)),
+            HologramHighlight.copy(alpha = 0.45f * alphaScale),
+            0.75f
+        )
+    }
+
+    // 3. Bulbous Vespa-Style Rear Body Cowls (far side -> ribs -> near side)
+    fun rearCowlPath(zSign: Float): Path {
+        val p0 = p(-0.18f, 0.30f, zSign * 0.24f)
+        val c1 = p(-0.24f, 0.72f, zSign * 0.30f)
+        val c2 = p(-0.62f, 0.78f, zSign * 0.33f)
+        val pTopRear = p(-0.96f, 0.56f, zSign * 0.17f)
+        val c3 = p(-0.96f, 0.34f, zSign * 0.18f)
+        val c4 = p(-0.56f, 0.24f, zSign * 0.32f)
+        return Path().apply {
+            moveTo(p0.x, p0.y)
+            cubicTo(c1.x, c1.y, c2.x, c2.y, pTopRear.x, pTopRear.y)
+            cubicTo(c3.x, c3.y, c4.x, c4.y, p0.x, p0.y)
+            close()
+        }
+    }
+
+    sideOrder.forEachIndexed { idx, zSign ->
+        val isNear = idx == 1
+        val cowlPath = rearCowlPath(zSign)
+        drawPath(
+            path = cowlPath,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    HologramHighlight.copy(alpha = (if (isNear) 0.26f else 0.12f) * alphaScale),
+                    accentColor.copy(alpha = (if (isNear) 0.18f else 0.08f) * alphaScale)
+                ),
+                start = p(-0.45f, 0.78f, zSign * 0.30f),
+                end = p(-0.55f, 0.28f, zSign * 0.30f)
+            )
+        )
+        drawPath(
+            path = cowlPath,
+            color = (if (isNear) accentColor else accentColor.copy(alpha = 0.55f)).copy(alpha = alphaScale),
+            style = Stroke(width = (if (isNear) 1.5f else 1.0f).dp.toPx(), cap = StrokeCap.Round)
+        )
+    }
+
+    // 4 curved cross-sectional mesh ribs wrapping over the rear body
+    listOf(
+        Triple(-0.34f, 0.74f, 0.28f),
+        Triple(-0.52f, 0.75f, 0.32f),
+        Triple(-0.70f, 0.70f, 0.29f),
+        Triple(-0.86f, 0.62f, 0.22f)
+    ).forEach { (rx, topY, halfW) ->
+        val ribPts = listOf(
+            Vec3(rx, 0.36f, -halfW),
+            Vec3(rx, topY * 0.78f, -halfW * 1.04f),
+            Vec3(rx, topY, 0f),
+            Vec3(rx, topY * 0.78f, halfW * 1.04f),
+            Vec3(rx, 0.36f, halfW)
+        )
+        strokePts(ribPts, HologramHighlight.copy(alpha = 0.52f * alphaScale), 0.75f)
+    }
+
+    // Glowing tail light bar
+    strokePts(
+        listOf(Vec3(-0.97f, 0.54f, -0.09f), Vec3(-0.97f, 0.54f, 0.09f)),
+        Color(0xFFFF7B84).copy(alpha = 0.90f * alphaScale),
+        2.2f
+    )
+
+    // 4. Wide Curved Front Apron / Leg Shield + Front Fender
+    fun frontShieldPath(): Path {
+        val topL = p(0.56f, 0.98f, -0.14f)
+        val topR = p(0.56f, 0.98f, 0.14f)
+        val midR = p(0.68f, 0.60f, 0.27f)
+        val botR = p(0.46f, 0.26f, 0.24f)
+        val botL = p(0.46f, 0.26f, -0.24f)
+        val midL = p(0.68f, 0.60f, -0.27f)
+        return Path().apply {
+            moveTo(topL.x, topL.y)
+            lineTo(topR.x, topR.y)
+            cubicTo(midR.x, midR.y, midR.x, midR.y, botR.x, botR.y)
+            lineTo(botL.x, botL.y)
+            cubicTo(midL.x, midL.y, midL.x, midL.y, topL.x, topL.y)
+            close()
+        }
+    }
+
+    val shieldPath = frontShieldPath()
+    drawPath(
+        path = shieldPath,
+        brush = Brush.linearGradient(
+            colors = listOf(
+                HologramHighlight.copy(alpha = 0.30f * alphaScale),
+                accentColor.copy(alpha = 0.14f * alphaScale)
+            ),
+            start = p(0.60f, 0.98f, 0f),
+            end = p(0.48f, 0.26f, 0f)
+        )
+    )
+    drawPath(
+        path = shieldPath,
+        color = accentColor.copy(alpha = 0.95f * alphaScale),
+        style = Stroke(width = 1.5.dp.toPx(), join = StrokeJoin.Round)
+    )
+
+    // Central horn-crest ridge ("cà vạt" Vespa) & horizontal shield ribs
+    strokePts(
         listOf(
-            Vec3(-0.14f, 0.42f, 0.22f),
-            Vec3(-0.14f, -0.18f, 0.22f),
-            Vec3(-0.16f, -0.78f, 0.52f),
-            Vec3(0.16f, -0.78f, 0.52f),
-            Vec3(0.14f, -0.18f, 0.22f),
-            Vec3(0.14f, 0.42f, 0.22f)
+            Vec3(0.60f, 0.97f, 0f),
+            Vec3(0.73f, 0.72f, 0f),
+            Vec3(0.75f, 0.50f, 0f)
         ),
-        accentColor,
+        HologramCoreWhite.copy(alpha = 0.92f * alphaScale),
+        1.5f
+    )
+    listOf(0.80f to 0.20f, 0.58f to 0.26f).forEach { (ry, hw) ->
+        strokePts(
+            listOf(Vec3(0.60f, ry, -hw), Vec3(0.72f, ry, 0f), Vec3(0.60f, ry, hw)),
+            HologramHighlight.copy(alpha = 0.50f * alphaScale),
+            0.75f
+        )
+    }
+
+    // Integrated front fender arching over front wheel
+    val fenderPts = listOf(
+        Vec3(0.48f, 0.36f, 0f),
+        Vec3(0.66f, 0.52f, 0f),
+        Vec3(0.88f, 0.48f, 0f),
+        Vec3(0.96f, 0.30f, 0f)
+    )
+    strokePts(fenderPts, accentColor.copy(alpha = 0.90f * alphaScale), 1.4f)
+    strokePts(
+        listOf(
+            Vec3(0.56f, 0.42f, -0.13f),
+            Vec3(0.78f, 0.50f, -0.13f),
+            Vec3(0.92f, 0.34f, -0.12f)
+        ),
+        accentColor.copy(alpha = 0.55f * alphaScale),
+        0.9f
+    )
+    strokePts(
+        listOf(
+            Vec3(0.56f, 0.42f, 0.13f),
+            Vec3(0.78f, 0.50f, 0.13f),
+            Vec3(0.92f, 0.34f, 0.12f)
+        ),
+        accentColor.copy(alpha = 0.55f * alphaScale),
+        0.9f
+    )
+
+    // 5. Contoured Two-Up Stepped Seat
+    val seatTopPts = listOf(
+        Vec3(-0.14f, 0.74f, -0.17f),
+        Vec3(-0.14f, 0.74f, 0.17f),
+        Vec3(-0.46f, 0.77f, 0.19f),
+        Vec3(-0.56f, 0.84f, 0.18f),
+        Vec3(-0.84f, 0.84f, 0.14f),
+        Vec3(-0.84f, 0.84f, -0.14f),
+        Vec3(-0.56f, 0.84f, -0.18f),
+        Vec3(-0.46f, 0.77f, -0.19f)
+    )
+    drawPath(
+        path = pathFrom(seatTopPts, closed = true),
+        brush = Brush.linearGradient(
+            colors = listOf(
+                HologramHighlight.copy(alpha = 0.32f * alphaScale),
+                accentColor.copy(alpha = 0.16f * alphaScale)
+            ),
+            start = p(-0.80f, 0.85f, 0f),
+            end = p(-0.16f, 0.74f, 0f)
+        )
+    )
+    strokePts(seatTopPts, HologramHighlight.copy(alpha = 0.92f * alphaScale), 1.4f, closed = true)
+    strokePts(
+        listOf(Vec3(-0.46f, 0.77f, -0.19f), Vec3(-0.46f, 0.77f, 0.19f)),
+        HologramCoreWhite.copy(alpha = 0.55f * alphaScale),
+        0.75f
+    )
+
+    // 6. Sculpted Handlebar Cowling, Glowing Visor & Twin Teardrop Mirrors
+    val cowlPts = listOf(
+        Vec3(0.68f, 1.04f, -0.16f),
+        Vec3(0.56f, 1.12f, -0.32f),
+        Vec3(0.46f, 1.12f, -0.32f),
+        Vec3(0.48f, 1.06f, 0f),
+        Vec3(0.46f, 1.12f, 0.32f),
+        Vec3(0.56f, 1.12f, 0.32f),
+        Vec3(0.68f, 1.04f, 0.16f),
+        Vec3(0.72f, 0.98f, 0f)
+    )
+    drawPath(
+        path = pathFrom(cowlPts, closed = true),
+        color = HologramHighlight.copy(alpha = 0.24f * alphaScale)
+    )
+    strokePts(cowlPts, HologramCoreWhite.copy(alpha = 0.95f * alphaScale), 1.5f, closed = true)
+
+    // Glowing instrument visor + elliptical LED headlight
+    strokePts(
+        listOf(Vec3(0.52f, 1.11f, -0.10f), Vec3(0.58f, 1.13f, 0f), Vec3(0.52f, 1.11f, 0.10f)),
+        HologramHighlight.copy(alpha = 0.90f * alphaScale),
         1.6f
     )
-
-    // Curved front shield / apron (yếm xe cong)
-    val leftApron = listOf(
-        Vec3(-0.18f, 0.42f, 0.24f),
-        Vec3(-0.22f, 0.60f, 0.56f),
-        Vec3(-0.15f, 0.66f, 0.88f),
-        Vec3(0f, 0.70f, 0.96f)
+    drawCircle(
+        color = accentColor.copy(alpha = 0.45f * alphaScale),
+        radius = 7.dp.toPx(),
+        center = headOrigin
     )
-    val rightApron = listOf(
-        Vec3(0.18f, 0.42f, 0.24f),
-        Vec3(0.22f, 0.60f, 0.56f),
-        Vec3(0.15f, 0.66f, 0.88f),
-        Vec3(0f, 0.70f, 0.96f)
-    )
-    strokePoly(leftApron, accentColor, 1.7f)
-    strokePoly(rightApron, accentColor, 1.7f)
-    strokePoly(
-        listOf(
-            Vec3(0f, 0.76f, 0.36f),
-            Vec3(0f, 0.74f, 0.68f),
-            Vec3(0f, 0.66f, 0.98f)
-        ),
-        highlightColor,
-        1.8f
+    drawCircle(
+        color = HologramCoreWhite.copy(alpha = alphaScale),
+        radius = 3.6.dp.toPx(),
+        center = headOrigin
     )
 
-    // Stepped seat (yên xe 2 tầng)
-    strokePoly(
-        listOf(
-            Vec3(-0.14f, -0.05f, 0.66f),
-            Vec3(-0.15f, -0.34f, 0.66f),
-            Vec3(-0.15f, -0.44f, 0.74f),
-            Vec3(-0.12f, -0.76f, 0.74f),
-            Vec3(0.12f, -0.76f, 0.74f),
-            Vec3(0.15f, -0.44f, 0.74f),
-            Vec3(0.15f, -0.34f, 0.66f),
-            Vec3(0.14f, -0.05f, 0.66f)
-        ),
-        highlightColor,
-        1.7f,
-        closed = true
-    )
-
-    // Steering column, handlebar & twin mirrors
-    strokePoly(
-        listOf(Vec3(0f, 0.55f, 0.56f), Vec3(0f, 0.48f, 1.08f)),
-        accentColor,
-        1.8f
-    )
-    strokePoly(
-        listOf(
-            Vec3(-0.34f, 0.44f, 1.07f),
-            Vec3(-0.12f, 0.48f, 1.10f),
-            Vec3(0.12f, 0.48f, 1.10f),
-            Vec3(0.34f, 0.44f, 1.07f)
-        ),
-        highlightColor,
-        2.0f
-    )
-    // Left & right mirrors
-    strokePoly(listOf(Vec3(-0.24f, 0.46f, 1.08f), Vec3(-0.31f, 0.45f, 1.24f)), accentColor, 1.4f)
-    strokePoly(listOf(Vec3(0.24f, 0.46f, 1.08f), Vec3(0.31f, 0.45f, 1.24f)), accentColor, 1.4f)
-    drawCircle(color = highlightColor, radius = 2.5.dp.toPx(), center = proj(-0.31f, 0.45f, 1.25f))
-    drawCircle(color = highlightColor, radius = 2.5.dp.toPx(), center = proj(0.31f, 0.45f, 1.25f))
-
-    // Headlight glow node
-    drawCircle(color = highlightColor, radius = 3.2.dp.toPx(), center = headOrigin)
+    // Twin teardrop mirrors
+    listOf(-1f, 1f).forEach { s ->
+        strokePts(
+            listOf(Vec3(0.56f, 1.12f, s * 0.22f), Vec3(0.55f, 1.30f, s * 0.29f)),
+            accentColor.copy(alpha = 0.90f * alphaScale),
+            1.2f
+        )
+        val mirrorCenter = p(0.55f, 1.33f, s * 0.31f)
+        drawOval(
+            color = HologramHighlight.copy(alpha = 0.30f * alphaScale),
+            topLeft = Offset(mirrorCenter.x - 4.5.dp.toPx(), mirrorCenter.y - 3.dp.toPx()),
+            size = Size(9.dp.toPx(), 6.dp.toPx())
+        )
+        drawOval(
+            color = HologramCoreWhite.copy(alpha = 0.92f * alphaScale),
+            topLeft = Offset(mirrorCenter.x - 4.5.dp.toPx(), mirrorCenter.y - 3.dp.toPx()),
+            size = Size(9.dp.toPx(), 6.dp.toPx()),
+            style = Stroke(width = 1.2.dp.toPx())
+        )
+    }
 }
 
-private fun DrawScope.drawCarWireframe25D(
+private fun DrawScope.drawVolumetricCar3D(
     origin: Offset,
+    floorOrigin: Offset,
     scale: Float,
     yawDeg: Float,
     pitchTiltDeg: Float,
     rollTiltDeg: Float,
-    perspectiveY: Float,
     accentColor: Color,
-    highlightColor: Color
+    alphaScale: Float
 ) {
-    fun proj(x: Float, y: Float, z: Float): Offset = project25D(
-        Vec3(x, y, z), origin, scale, yawDeg, pitchTiltDeg, rollTiltDeg, perspectiveY
-    )
+    fun p(x: Float, y: Float, z: Float): Offset =
+        project3D(Vec3(x, y, z), origin, scale, yawDeg, pitchTiltDeg, rollTiltDeg)
 
-    fun strokePoly(points: List<Vec3>, color: Color, widthDp: Float, closed: Boolean = false) {
-        val path = Path().apply {
-            val first = proj(points[0].x, points[0].y, points[0].z)
-            moveTo(first.x, first.y)
-            for (i in 1 until points.size) {
-                val pt = proj(points[i].x, points[i].y, points[i].z)
-                lineTo(pt.x, pt.y)
-            }
-            if (closed) close()
+    fun pFloor(x: Float, z: Float): Offset =
+        project3D(Vec3(x, 0f, z), floorOrigin, scale, yawDeg, pitchTiltDeg, rollTiltDeg)
+
+    fun pathFrom(pts: List<Vec3>, closed: Boolean = false): Path = Path().apply {
+        val first = p(pts[0].x, pts[0].y, pts[0].z)
+        moveTo(first.x, first.y)
+        for (i in 1 until pts.size) {
+            val pt = p(pts[i].x, pts[i].y, pts[i].z)
+            lineTo(pt.x, pt.y)
         }
+        if (closed) close()
+    }
+
+    fun strokePts(pts: List<Vec3>, color: Color, widthDp: Float, closed: Boolean = false) {
         drawPath(
-            path = path,
+            path = pathFrom(pts, closed),
             color = color,
             style = Stroke(width = widthDp.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
     }
 
+    // Ground shadows under front & rear axles
+    listOf(0.58f, -0.58f).forEach { wx ->
+        val c = pFloor(wx, 0f)
+        val rx = scale * 0.56f
+        val ry = rx * 0.44f
+        drawOval(
+            brush = Brush.radialGradient(
+                colors = listOf(accentColor.copy(alpha = 0.30f * alphaScale), Color.Transparent),
+                center = c,
+                radius = rx
+            ),
+            topLeft = Offset(c.x - rx, c.y - ry),
+            size = Size(rx * 2f, ry * 2f)
+        )
+    }
+
     // Twin headlight beams
-    listOf(-0.30f, 0.30f).forEach { hx ->
-        val hOrigin = proj(hx, 0.92f, 0.34f)
-        val bL = proj(hx - 0.16f, 1.55f, 0.04f)
-        val bR = proj(hx + 0.16f, 1.55f, 0.04f)
+    listOf(-0.32f, 0.32f).forEach { hz ->
+        val hOrigin = p(0.94f, 0.36f, hz)
+        val bL = pFloor(1.62f, hz - 0.16f)
+        val bR = pFloor(1.62f, hz + 0.16f)
         val path = Path().apply {
             moveTo(hOrigin.x, hOrigin.y)
             lineTo(bL.x, bL.y)
@@ -883,59 +1147,93 @@ private fun DrawScope.drawCarWireframe25D(
         drawPath(
             path = path,
             brush = Brush.linearGradient(
-                colors = listOf(highlightColor.copy(alpha = 0.25f), Color.Transparent),
+                colors = listOf(HologramHighlight.copy(alpha = 0.25f * alphaScale), Color.Transparent),
                 start = hOrigin,
                 end = Offset((bL.x + bR.x) * 0.5f, (bL.y + bR.y) * 0.5f)
             )
         )
-        drawCircle(color = highlightColor, radius = 2.6.dp.toPx(), center = hOrigin)
+        drawCircle(color = HologramCoreWhite.copy(alpha = alphaScale), radius = 2.6.dp.toPx(), center = hOrigin)
     }
 
-    // Lower body chassis
-    val lowerBody = listOf(
-        Vec3(-0.42f, 0.92f, 0.22f),
-        Vec3(0.42f, 0.92f, 0.22f),
-        Vec3(0.42f, -0.92f, 0.22f),
-        Vec3(-0.42f, -0.92f, 0.22f)
-    )
-    strokePoly(lowerBody, accentColor, 1.6f, closed = true)
-
-    // Beltline (hood + trunk + fenders)
-    val beltline = listOf(
-        Vec3(-0.42f, 0.90f, 0.44f),
-        Vec3(0.42f, 0.90f, 0.44f),
-        Vec3(0.42f, -0.90f, 0.48f),
-        Vec3(-0.42f, -0.90f, 0.48f)
-    )
-    strokePoly(beltline, accentColor, 1.7f, closed = true)
-
-    // Cabin roof
-    val roof = listOf(
-        Vec3(-0.32f, 0.26f, 0.80f),
-        Vec3(0.32f, 0.26f, 0.80f),
-        Vec3(0.32f, -0.48f, 0.78f),
-        Vec3(-0.32f, -0.48f, 0.78f)
-    )
-    strokePoly(roof, highlightColor, 1.8f, closed = true)
-
-    // Pillars connecting beltline to roof
-    val pillars = listOf(
-        Vec3(-0.40f, 0.52f, 0.45f) to Vec3(-0.32f, 0.26f, 0.80f),
-        Vec3(0.40f, 0.52f, 0.45f) to Vec3(0.32f, 0.26f, 0.80f),
-        Vec3(-0.40f, -0.74f, 0.48f) to Vec3(-0.32f, -0.48f, 0.78f),
-        Vec3(0.40f, -0.74f, 0.48f) to Vec3(0.32f, -0.48f, 0.78f)
-    )
-    pillars.forEach { (a, b) -> strokePoly(listOf(a, b), highlightColor, 1.5f) }
-
-    // 4 wheel hubs
+    // 4 thick 3D extruded wheels
     listOf(
-        Vec3(-0.42f, 0.58f, 0.18f),
-        Vec3(0.42f, 0.58f, 0.18f),
-        Vec3(-0.42f, -0.58f, 0.18f),
-        Vec3(0.42f, -0.58f, 0.18f)
-    ).forEach { w ->
-        val hub = proj(w.x, w.y, w.z)
-        drawCircle(color = accentColor.copy(alpha = 0.35f), radius = 5.dp.toPx(), center = hub)
-        drawCircle(color = highlightColor, radius = 2.4.dp.toPx(), center = hub)
+        0.58f to -0.44f,
+        0.58f to 0.44f,
+        -0.58f to -0.44f,
+        -0.58f to 0.44f
+    ).forEach { (wx, wz) ->
+        val r = 0.19f
+        val outerPts = (0 until 12).map { i ->
+            val a = 2.0 * PI * i / 12
+            Vec3(wx + (r * cos(a)).toFloat(), r + (r * sin(a)).toFloat(), wz)
+        }
+        drawPath(path = pathFrom(outerPts, closed = true), color = accentColor.copy(alpha = 0.18f * alphaScale))
+        strokePts(outerPts, accentColor.copy(alpha = 0.90f * alphaScale), 1.4f, closed = true)
+        val hub = p(wx, r, wz)
+        drawCircle(color = HologramHighlight.copy(alpha = 0.85f * alphaScale), radius = 2.2.dp.toPx(), center = hub)
     }
+
+    // Volumetric lower body shell
+    val lowerPts = listOf(
+        Vec3(0.95f, 0.22f, -0.44f),
+        Vec3(0.95f, 0.22f, 0.44f),
+        Vec3(-0.92f, 0.24f, 0.44f),
+        Vec3(-0.92f, 0.24f, -0.44f)
+    )
+    val beltPts = listOf(
+        Vec3(0.92f, 0.46f, -0.42f),
+        Vec3(0.92f, 0.46f, 0.42f),
+        Vec3(-0.90f, 0.52f, 0.42f),
+        Vec3(-0.90f, 0.52f, -0.42f)
+    )
+    drawPath(
+        path = pathFrom(beltPts, closed = true),
+        brush = Brush.linearGradient(
+            colors = listOf(
+                HologramHighlight.copy(alpha = 0.22f * alphaScale),
+                accentColor.copy(alpha = 0.10f * alphaScale)
+            ),
+            start = p(0.92f, 0.46f, 0f),
+            end = p(-0.90f, 0.52f, 0f)
+        )
+    )
+    strokePts(lowerPts, accentColor.copy(alpha = 0.65f * alphaScale), 1.1f, closed = true)
+    strokePts(beltPts, accentColor.copy(alpha = 0.95f * alphaScale), 1.5f, closed = true)
+
+    // Cross-sectional body ribs
+    listOf(0.55f, 0.10f, -0.45f).forEach { rx ->
+        strokePts(
+            listOf(Vec3(rx, 0.23f, -0.43f), Vec3(rx, 0.48f, -0.42f), Vec3(rx, 0.48f, 0.42f), Vec3(rx, 0.23f, 0.43f)),
+            HologramHighlight.copy(alpha = 0.42f * alphaScale),
+            0.75f
+        )
+    }
+
+    // Greenhouse cabin roof + pillars
+    val roofPts = listOf(
+        Vec3(0.28f, 0.82f, -0.33f),
+        Vec3(0.28f, 0.82f, 0.33f),
+        Vec3(-0.48f, 0.80f, 0.33f),
+        Vec3(-0.48f, 0.80f, -0.33f)
+    )
+    drawPath(
+        path = pathFrom(roofPts, closed = true),
+        color = HologramHighlight.copy(alpha = 0.24f * alphaScale)
+    )
+    strokePts(roofPts, HologramCoreWhite.copy(alpha = 0.92f * alphaScale), 1.5f, closed = true)
+    listOf(
+        Vec3(0.56f, 0.47f, -0.40f) to Vec3(0.28f, 0.82f, -0.33f),
+        Vec3(0.56f, 0.47f, 0.40f) to Vec3(0.28f, 0.82f, 0.33f),
+        Vec3(-0.76f, 0.52f, -0.40f) to Vec3(-0.48f, 0.80f, -0.33f),
+        Vec3(-0.76f, 0.52f, 0.40f) to Vec3(-0.48f, 0.80f, 0.33f)
+    ).forEach { (a, b) ->
+        strokePts(listOf(a, b), HologramHighlight.copy(alpha = 0.88f * alphaScale), 1.3f)
+    }
+
+    // Rear LED light bar
+    strokePts(
+        listOf(Vec3(-0.91f, 0.48f, -0.34f), Vec3(-0.91f, 0.48f, 0.34f)),
+        Color(0xFFFF7B84).copy(alpha = 0.88f * alphaScale),
+        2.0f
+    )
 }
