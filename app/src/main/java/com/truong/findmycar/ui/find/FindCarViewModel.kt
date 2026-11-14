@@ -46,6 +46,7 @@ data class FindCarUiState(
     val guidance: GuidanceState = GuidanceState(phase = GuidancePhase.NO_SIGNAL_FALLBACK),
     val userHeadingDeg: Float = 0f,
     val vehicleType: VehicleHologramType = VehicleHologramType.SCOOTER,
+    val hapticEnabled: Boolean = true,
     val isLoading: Boolean = true
 )
 
@@ -150,6 +151,7 @@ class FindCarViewModel(
                 spot = spot,
                 guidance = createdEngine.currentState(),
                 vehicleType = settings.vehicleType,
+                hapticEnabled = settings.hapticFeedbackEnabled,
                 isLoading = false
             )
 

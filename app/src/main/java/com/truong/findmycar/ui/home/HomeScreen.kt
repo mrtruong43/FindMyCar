@@ -114,6 +114,7 @@ import com.truong.findmycar.ui.components.EditAnchorBottomSheet
 import com.truong.findmycar.ui.components.FloorBadge
 import com.truong.findmycar.ui.components.HologramStageMode
 import com.truong.findmycar.ui.components.ScooterHologramStage
+import com.truong.findmycar.ui.components.TripCompletedOverlay
 import com.truong.findmycar.ui.components.formatElapsedTime
 import com.truong.findmycar.ui.theme.BentoCardBorder
 import com.truong.findmycar.ui.theme.BentoCardSurface
@@ -142,6 +143,7 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
     var showEditAnchorSheet by remember { mutableStateOf(false) }
+    var completedTripSummary by remember { mutableStateOf<Pair<Long, String>?>(null) }
     var liveGpsAccuracyM by remember { mutableStateOf<Float?>(null) }
     var livePressureHpa by remember { mutableStateOf<Float?>(null) }
 
@@ -393,6 +395,7 @@ fun HomeScreen(
                             onCardClick = { onOpenDetail(spot.id) },
                             onFindClick = { onOpenFind(spot.id) },
                             onMarkFoundClick = {
+                                completedTripSummary = Pair(spot.savedAt, spot.note)
                                 if (uiState.isTracking) {
                                     TrackingService.stop(context)
                                 }
@@ -440,6 +443,15 @@ fun HomeScreen(
                     permissionLauncher.launch(Permissions.FOREGROUND_LOCATION_PERMISSIONS)
                 }
             }
+        )
+    }
+
+    completedTripSummary?.let { (savedAtMs, note) ->
+        TripCompletedOverlay(
+            savedAtMs = savedAtMs,
+            note = note,
+            hapticEnabled = uiState.hapticFeedbackEnabled,
+            onDismiss = { completedTripSummary = null }
         )
     }
 }

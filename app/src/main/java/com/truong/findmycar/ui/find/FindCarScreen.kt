@@ -78,6 +78,7 @@ import com.truong.findmycar.guidance.GuidancePhase
 import com.truong.findmycar.ui.components.FloorBadge
 import com.truong.findmycar.ui.components.HologramStageMode
 import com.truong.findmycar.ui.components.ScooterHologramStage
+import com.truong.findmycar.ui.components.TripCompletedOverlay
 import com.truong.findmycar.ui.theme.BentoCardBorder
 import com.truong.findmycar.ui.theme.BentoCardSurface
 import com.truong.findmycar.ui.theme.MintAccent
@@ -98,6 +99,7 @@ fun FindCarScreen(
     val context = LocalContext.current
 
     var showNoteSheet by remember { mutableStateOf(false) }
+    var completedTripSummary by remember { mutableStateOf<Pair<Long, String>?>(null) }
 
     // Gently open note/photo sheet automatically when entering VERY_CLOSE (< 8m)
     var autoOpenedCloseSheet by remember { mutableStateOf(false) }
@@ -393,7 +395,15 @@ fun FindCarScreen(
                             }
 
                             Button(
-                                onClick = { viewModel.markCarFound(onClose) },
+                                onClick = {
+                                    val summary = Pair(
+                                        spot?.savedAt ?: System.currentTimeMillis(),
+                                        spot?.note.orEmpty()
+                                    )
+                                    viewModel.markCarFound {
+                                        completedTripSummary = summary
+                                    }
+                                },
                                 shape = CircleShape,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MintAccent,
@@ -490,5 +500,17 @@ fun FindCarScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    }
+
+    completedTripSummary?.let { (savedAtMs, note) ->
+        TripCompletedOverlay(
+            savedAtMs = savedAtMs,
+            note = note,
+            hapticEnabled = uiState.hapticEnabled,
+            onDismiss = {
+                completedTripSummary = null
+                onClose()
+            }
+        )
     }
 }
