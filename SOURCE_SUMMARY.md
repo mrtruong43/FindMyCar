@@ -1,6 +1,6 @@
-# FindMyCar — Tổng hợp Source Code & Kiến trúc (Cập nhật M5)
+# FindMyCar — Tổng hợp Source Code & Kiến trúc (Hoàn thiện M1–M6)
 
-> Tài liệu này được cập nhật sau mỗi lần build debug để đội ngũ dev nắm nhanh cấu trúc, luồng dữ liệu và trạng thái hiện tại của ứng dụng.
+> Tài liệu này tổng hợp toàn bộ kiến trúc, luồng dữ liệu và vai trò từng file của ứng dụng sau khi hoàn thành đầy đủ cả 6 mốc (M1–M6).
 
 ## 1. Thông tin chung & Toolchain
 
@@ -12,7 +12,8 @@
   - Jetpack Compose (Material 3, Dark Mode mặc định, tắt Dynamic Color, màu nhấn `#2EE6A6`).
   - Room `2.7.2`, DataStore Preferences `1.1.7`, Navigation Compose `2.9.0`, Google Play Services Location `21.3.0`.
   - **Lưu ý build CLI:** Cần trỏ `JAVA_HOME` tới JDK 17 (`C:\Users\Thu\AppData\Local\Programs\openjdk-17\jdk-17.0.19+10`).
-- **File APK hiện tại:** `findmycar-debug.apk` (`12,735,926` bytes / ~12.15 MB).
+- **File APK hiện tại:** `findmycar-debug.apk` (`12,817,922` bytes / ~12.22 MB).
+- **Unit test:** 22/22 test pass trên JVM (không phụ thuộc thiết bị Android).
 
 ---
 
@@ -20,19 +21,19 @@
 
 ```text
 app/src/main/java/com/truong/findmycar/
-├── FindMyCarApp.kt                 # Application + AppContainer
+├── FindMyCarApp.kt                 # Application + AppContainer; tự đăng ký ActivityTransition khi khởi động
 ├── MainActivity.kt                 # Single-Activity (singleTop), deep-link EXTRA_OPEN_SPOT_DETAIL_ID
 ├── data/
-│   ├── db/                         # Entities, ParkingSpotDao, TrackPointDao, AppDatabase
-│   ├── ParkingRepository.kt        # Spot ACTIVE đơn nhất, insertTrackPoints(), getTrackPoints(), finalizeAnchor()
-│   └── SettingsStore.kt            # DataStore Preferences
+│   ├── db/                         # Entities, ParkingSpotDao (observeHistorySpots, deleteAll), TrackPointDao, AppDatabase
+│   ├── ParkingRepository.kt        # Spot ACTIVE đơn nhất, lịch sử, xóa spot/toàn bộ dữ liệu
+│   └── SettingsStore.kt            # DataStore Preferences (userHeightM, floorHeightM, calibratedStepLengthM, autoDetect, haptic, onboarding, barometerNotice)
 ├── detect/
-│   ├── ActivityTransitionManager.kt  # Đăng ký/hủy IN_VEHICLE & WALKING
+│   ├── ActivityTransitionManager.kt  # Đăng ký/hủy IN_VEHICLE & WALKING (PendingIntent FLAG_MUTABLE)
 │   ├── ActivityTransitionReceiver.kt # BroadcastReceiver dùng goAsync() -> ParkingDetector
 │   ├── BootReceiver.kt               # RECEIVE_BOOT_COMPLETED -> đăng ký lại ActivityTransition
 │   ├── RecentLocationBuffer.kt       # Ring buffer 5 phút, lọc fix <= 50m
 │   ├── ParkingStateMachine.kt        # Thuần Kotlin: luật 2 phút & chống trùng 90s
-│   └── ParkingDetector.kt            # Lưu thủ công & tự động, LocationUpdates khi lái xe, barometer 2s
+│   └── ParkingDetector.kt            # Lưu thủ công & tự động, LocationUpdates khi lái xe, barometer 2s, notification
 ├── guidance/
 │   ├── CircularFilter.kt           # Thuần Kotlin: lọc thông thấp góc trên sin/cos
 │   └── GuidanceEngine.kt           # Thuần Kotlin: điều hướng 2 pha (GPS tới neo -> đảo dấu chân trong hầm), <8m Rất gần
@@ -41,45 +42,34 @@ app/src/main/java/com/truong/findmycar/
 │   ├── PressureAltimeter.kt        # Thuần Kotlin: trung bình trượt 1.5s + lọc thông thấp
 │   ├── PathModel.kt                # Thuần Kotlin: bước đi, đảo đường, chiếu polyline, lookahead
 │   ├── StepTracker.kt              # SensorAdapter: TYPE_STEP_DETECTOR (batching 1s)
-│   ├── HeadingSensorAdapter.kt     # SensorAdapter: TYPE_ROTATION_VECTOR + TYPE_LINEAR_ACCELERATION
+│   ├── HeadingSensorAdapter.kt     # SensorAdapter: TYPE_ROTATION_VECTOR + TYPE_LINEAR_ACCELERATION + giảm tần số khi đứng yên 10s
 │   ├── PressureSensorAdapter.kt    # SensorAdapter: TYPE_PRESSURE
 │   ├── TrackingStateHolder.kt      # StateFlow: telemetry realtime + bộ đệm log CSV
-│   └── TrackingService.kt          # Foreground Service: ghi dấu chân theo lô, chốt neo tự động/thủ công
+│   └── TrackingService.kt          # Foreground Service: ghi dấu chân theo lô (10 điểm / 5s), chốt neo, auto-stop 30p/pin <10%
 ├── ui/
 │   ├── theme/                      # Color.kt, Shape.kt, Type.kt, Theme.kt
-│   ├── components/                 # ArrowCompass.kt (Canvas + spring + cone hiệu chỉnh + chấm nhịp thở), FloorBadge.kt, TimeFormat.kt, BatteryOptimizationCard.kt
-│   ├── onboarding/                 # OnboardingScreen.kt
-│   ├── settings/                   # SettingsViewModel.kt, SettingsScreen.kt (7 chạm mở Debug)
+│   ├── components/                 # ArrowCompass.kt, FloorBadge.kt (TalkBack), TimeFormat.kt, BatteryOptimizationCard.kt
+│   ├── onboarding/                 # OnboardingScreen.kt (3 bước, xin quyền 2 bước, tối ưu pin Samsung)
+│   ├── home/                       # HomeViewModel.kt, HomeScreen.kt (banner thiếu quyền, thông báo thiếu khí áp kế, TalkBack)
+│   ├── detail/                     # SpotDetailViewModel.kt, SpotDetailScreen.kt (ghi chú, giọng nói vi-VN, ảnh, geo:)
+│   ├── find/                       # FindCarViewModel.kt, FindCarScreen.kt (Precision Finding, rung theo khoảng cách, TalkBack)
+│   ├── history/                    # HistoryViewModel.kt, HistoryScreen.kt (danh sách FOUND/ARCHIVED, xem chi tiết, chia sẻ, xóa kèm file ảnh)
+│   ├── settings/                   # SettingsViewModel.kt, SettingsScreen.kt, StepCalibrationDialog.kt (hiệu chỉnh bước, xóa dữ liệu, 7 chạm mở Debug)
 │   ├── debug/                      # DebugScreen.kt (telemetry realtime + xuất CSV)
-│   ├── home/                       # HomeViewModel.kt, HomeScreen.kt
-│   ├── detail/                     # SpotDetailViewModel.kt, SpotDetailScreen.kt
-│   ├── find/                       # FindCarViewModel.kt (GPS + cảm biến + rung theo khoảng cách), FindCarScreen.kt (Precision Finding)
 │   └── navigation/                 # NavGraph.kt
 └── util/
     ├── GeoMath.kt                  # Thuần Kotlin: Haversine, bearing, độ cao khí áp, tầng, geo URI
     ├── Permissions.kt              # Kiểm tra & mở cài đặt quyền
-    └── PhotoUtils.kt               # FileProvider URI & decode ảnh có scale
+    └── PhotoUtils.kt               # FileProvider URI, decode ảnh có scale, deletePhotoFile(), deleteAllPhotos()
 ```
 
 ---
 
-## 3. Luồng dẫn đường quay về (M5)
+## 3. Trạng thái các mốc (Roadmap)
 
-1. **`GuidanceEngine` (thuần Kotlin):**
-   - **Thiếu cả GPS và dấu chân:** Chuyển sang `NO_SIGNAL_FALLBACK`, chỉ hiển thị ghi chú, ảnh và tầng kèm lý do rõ ràng.
-   - **Chỉ có GPS (spot thủ công không có dấu chân):** Pha `PHASE1_GPS_TO_CAR` dẫn thẳng bằng bearing/khoảng cách GPS tới xe.
-   - **Pha 1 (`PHASE1_GPS_TO_ANCHOR`):** Dẫn GPS tới điểm neo (`anchorLat/anchorLon`, fallback `lat/lon` xe). Tự chuyển sang Pha 2 khi cách neo **< 15 m** hoặc khi người dùng bấm **"Tôi đang ở lối ra/thang máy"**.
-   - **Pha 2 (`PHASE2_FOOTPRINT`):** Tắt GPS để tiết kiệm pin, đặt lại mốc áp suất tại lối ra, đảo ngược polyline `TrackPoint` từ neo về xe. Mỗi bước chân chiếu `(x, y)` lên polyline, chọn điểm lookahead **6.5 m** phía trước, tính khoảng cách còn lại dọc theo đường đi (không dùng đường chim bay), và tính chênh lệch tầng từ `hTarget = -anchorRelHeightM`.
-   - **Rất gần (< 8 m):** Chuyển sang `VERY_CLOSE`, rung dài xác nhận, thu mũi tên thành chấm sáng `#2EE6A6` nhịp thở và tự mở ngăn kéo ghi chú/ảnh (nếu có).
-2. **Giao diện `FindCarScreen` & `ArrowCompass`:**
-   - Màn hình tối toàn phần, `FloorBadge` ở trên cùng, mũi tên `Canvas` xoay bằng `spring` theo cung ngắn nhất. Sáng `#2EE6A6` + rung 1 nhịp khi lệch hướng `< 15°`.
-   - Nếu la bàn nhiễu (`SENSOR_STATUS_UNRELIABLE` / `LOW`), mũi tên biến thành hình quạt rộng nét đứt kèm nhắc **"Vẽ số 8 để hiệu chỉnh"**.
-   - Rung nhịp theo khoảng cách (1.5s khi `> 30m` rút ngắn dần xuống 0.3s khi `< 5m`).
-
----
-
-## 4. Trạng thái các mốc (Roadmap)
-
-- **M1–M4 (Hoàn thành):** Nền tảng, Room/DataStore, Onboarding/Settings/TrackingService, Auto-Detect (`RecentLocationBuffer`), Dead Reckoning + Debug CSV.
-- **M5 (Hoàn thành):** `GuidanceEngine` 2 pha, `ArrowCompass`, `FindCarScreen`, rung theo khoảng cách, modal ghi chú/ảnh & nút **"Đã tìm thấy xe"**.
-- **M6 (Chưa làm):** Lịch sử đỗ xe đầy đủ, hiệu chỉnh độ dài bước chân, hoàn thiện & tối ưu pin.
+- **M1 (Hoàn thành):** Nền tảng, Room + KSP, DataStore, Home, Chi tiết spot, Lưu thủ công.
+- **M2 (Hoàn thành):** Onboarding 3 bước, xin quyền 2 bước, hướng dẫn tối ưu pin Samsung, `TrackingService`.
+- **M3 (Hoàn thành):** Phát hiện đỗ xe tự động (`ActivityTransitionReceiver`, `BootReceiver`, `RecentLocationBuffer`).
+- **M4 (Hoàn thành):** Dead reckoning (`HeadingEstimator`, `PressureAltimeter`, `PathModel`, cảm biến thực, chốt neo, Debug CSV).
+- **M5 (Hoàn thành):** Dẫn đường quay về 2 pha (`GuidanceEngine`, `ArrowCompass`, `FindCarScreen`, rung theo khoảng cách).
+- **M6 (Hoàn thành):** `HistoryScreen` (chia sẻ & xóa kèm file ảnh), `SettingsScreen` đầy đủ, `StepCalibrationDialog`, xóa toàn bộ dữ liệu, banner thiếu quyền/khí áp kế, TalkBack accessibility & audit giải phóng tài nguyên/pin.

@@ -1,6 +1,9 @@
 package com.truong.findmycar.ui.home
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -47,6 +50,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -65,6 +69,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -74,6 +81,7 @@ import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.tracking.TrackingService
 import com.truong.findmycar.ui.components.FloorBadge
 import com.truong.findmycar.ui.components.formatElapsedTime
+import com.truong.findmycar.ui.theme.WarningAmber
 import com.truong.findmycar.util.Permissions
 import com.truong.findmycar.util.PhotoUtils
 import kotlinx.coroutines.delay
@@ -88,7 +96,37 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var hasMissingAutoDetectPerm by remember {
+        mutableStateOf(
+            !Permissions.hasForegroundLocation(context) || !Permissions.hasActivityRecognition(context)
+        )
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasMissingAutoDetectPerm =
+                    !Permissions.hasForegroundLocation(context) || !Permissions.hasActivityRecognition(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(uiState.barometerNoticeShown) {
+        if (!uiState.barometerNoticeShown) {
+            val sm = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+            if (sm?.getDefaultSensor(Sensor.TYPE_PRESSURE) == null) {
+                viewModel.markBarometerNoticeShown()
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.home_barometer_missing_notice)
+                )
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -143,19 +181,30 @@ fun HomeScreen(
                 .padding(innerPadding)
                 .navigationBarsPadding()
         ) {
-            val isCompactHeight = maxHeight < 520.dp
-            val horizontalPadding = if (maxWidth < 360.dp) 16.dp else 24.dp
+            val boxMaxWidth = maxWidth
+            val boxMaxHeight = maxHeight
+            val isCompactHeight = boxMaxHeight < 520.dp
+            val horizontalPadding = if (boxMaxWidth < 360.dp) 16.dp else 24.dp
 
-            AnimatedContent(
-                targetState = uiState.activeSpot,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "home_state_transition"
-            ) { spot ->
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (uiState.autoDetectEnabled && hasMissingAutoDetectPerm) {
+                    MissingPermissionBanner(
+                        horizontalPadding = horizontalPadding,
+                        onGrantClick = { Permissions.openAppSettings(context) }
+                    )
+                }
+
+                AnimatedContent(
+                    targetState = uiState.activeSpot,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    modifier = Modifier.weight(1f),
+                    label = "home_state_transition"
+                ) { spot ->
                 if (spot == null) {
                     EmptyHomeContent(
                         isSaving = uiState.isSaving,
                         isCompactHeight = isCompactHeight,
-                        circleDiameter = minOf(maxWidth * 0.46f, maxHeight * 0.34f).coerceIn(132.dp, 196.dp),
+                        circleDiameter = minOf(boxMaxWidth * 0.46f, boxMaxHeight * 0.34f).coerceIn(132.dp, 196.dp),
                         horizontalPadding = horizontalPadding,
                         onSaveClick = onRequestSave
                     )
@@ -183,6 +232,53 @@ fun HomeScreen(
                         }
                     )
                 }
+            }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MissingPermissionBanner(
+    horizontalPadding: Dp,
+    onGrantClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.55f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_perm_banner_title),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = WarningAmber
+                )
+                Text(
+                    text = stringResource(R.string.home_perm_banner_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            OutlinedButton(
+                onClick = onGrantClick,
+                shape = CircleShape,
+                border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.7f)),
+                modifier = Modifier.height(56.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.home_perm_banner_action),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = WarningAmber
+                )
             }
         }
     }
@@ -299,12 +395,14 @@ private fun SaveCarCircleButton(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surface
+    val buttonCd = stringResource(R.string.home_empty_hint)
 
     Box(
         modifier = Modifier
             .size(diameter)
             .clip(CircleShape)
             .background(surface)
+            .semantics { contentDescription = buttonCd }
             .clickable(enabled = !isSaving, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

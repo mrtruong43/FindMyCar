@@ -59,6 +59,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -179,11 +181,34 @@ fun FindCarScreen(
                         }
                     }
                 } else {
+                    val distIntForA11y = guidance.distanceMeters?.roundToInt() ?: 0
+                    val dirForA11y = when {
+                        guidance.phase == GuidancePhase.VERY_CLOSE -> stringResource(R.string.find_status_very_close)
+                        abs(guidance.relativeArrowDeg) < 15f -> stringResource(R.string.find_status_straight)
+                        guidance.relativeArrowDeg in 15f..150f -> stringResource(R.string.find_status_right)
+                        guidance.relativeArrowDeg in -150f..-15f -> stringResource(R.string.find_status_left)
+                        else -> stringResource(R.string.find_status_turn_around)
+                    }
+                    val floorForA11y = guidance.floorDeltaToTarget?.let { delta ->
+                        when {
+                            delta > 0 -> stringResource(R.string.find_floor_up, delta)
+                            delta < 0 -> stringResource(R.string.find_floor_down, abs(delta))
+                            else -> stringResource(R.string.find_floor_same)
+                        }
+                    }
+                    val compassA11y = if (floorForA11y != null) {
+                        stringResource(R.string.a11y_compass_with_floor, distIntForA11y, dirForA11y, floorForA11y)
+                    } else {
+                        stringResource(R.string.a11y_compass_summary, distIntForA11y, dirForA11y)
+                    }
+
                     ArrowCompass(
                         relativeArrowDeg = guidance.relativeArrowDeg,
                         isVeryClose = guidance.phase == GuidancePhase.VERY_CLOSE,
                         isLowAccuracy = guidance.isCompassLowAccuracy,
-                        modifier = Modifier.size(compassSize)
+                        modifier = Modifier
+                            .size(compassSize)
+                            .semantics { contentDescription = compassA11y }
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))

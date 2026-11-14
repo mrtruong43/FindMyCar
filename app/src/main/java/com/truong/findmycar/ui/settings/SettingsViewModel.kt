@@ -5,8 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.truong.findmycar.data.AppSettings
+import com.truong.findmycar.data.ParkingRepository
 import com.truong.findmycar.data.SettingsStore
 import com.truong.findmycar.detect.ActivityTransitionManager
+import com.truong.findmycar.tracking.TrackingService
+import com.truong.findmycar.util.PhotoUtils
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -14,7 +17,8 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val appContext: Context,
-    private val settingsStore: SettingsStore
+    private val settingsStore: SettingsStore,
+    private val repository: ParkingRepository
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = settingsStore.settings.stateIn(
@@ -46,13 +50,27 @@ class SettingsViewModel(
         viewModelScope.launch { settingsStore.setFloorHeightM(heightM) }
     }
 
+    fun setCalibratedStepLengthM(stepLengthM: Float?) {
+        viewModelScope.launch { settingsStore.setCalibratedStepLengthM(stepLengthM) }
+    }
+
+    fun clearAllData(onDone: () -> Unit) {
+        viewModelScope.launch {
+            TrackingService.stop(appContext)
+            PhotoUtils.deleteAllPhotos(appContext)
+            repository.deleteAllData()
+            onDone()
+        }
+    }
+
     class Factory(
         private val context: Context,
-        private val settingsStore: SettingsStore
+        private val settingsStore: SettingsStore,
+        private val repository: ParkingRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SettingsViewModel(context.applicationContext, settingsStore) as T
+            return SettingsViewModel(context.applicationContext, settingsStore, repository) as T
         }
     }
 }

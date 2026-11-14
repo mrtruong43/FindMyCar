@@ -14,6 +14,8 @@ class ParkingRepository(
 ) {
     val activeSpot: Flow<ParkingSpotEntity?> = parkingSpotDao.observeActiveSpot()
 
+    val historySpots: Flow<List<ParkingSpotEntity>> = parkingSpotDao.observeHistorySpots()
+
     suspend fun getActiveSpotOnce(): ParkingSpotEntity? =
         parkingSpotDao.getActiveSpotOnce()
 
@@ -93,4 +95,12 @@ class ParkingRepository(
 
     suspend fun getTrackPoints(spotId: Long): List<TrackPointEntity> =
         trackPointDao.getBySpotId(spotId)
+
+    suspend fun deleteSpot(spotId: Long) {
+        parkingSpotDao.deleteById(spotId)
+    }
+
+    suspend fun deleteAllData() {
+        parkingSpotDao.deleteAll()
+    }
 }

@@ -25,6 +25,9 @@ interface ParkingSpotDao {
     @Query("SELECT * FROM parking_spots ORDER BY savedAt DESC")
     fun observeAllSpots(): Flow<List<ParkingSpotEntity>>
 
+    @Query("SELECT * FROM parking_spots WHERE status != 'ACTIVE' ORDER BY savedAt DESC")
+    fun observeHistorySpots(): Flow<List<ParkingSpotEntity>>
+
     @Query("UPDATE parking_spots SET status = 'ARCHIVED' WHERE status = 'ACTIVE'")
     suspend fun archiveAllActive()
 
@@ -70,4 +73,7 @@ interface ParkingSpotDao {
 
     @Query("DELETE FROM parking_spots WHERE id = :spotId")
     suspend fun deleteById(spotId: Long)
+
+    @Query("DELETE FROM parking_spots")
+    suspend fun deleteAll()
 }

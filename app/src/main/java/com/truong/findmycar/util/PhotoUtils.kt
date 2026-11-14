@@ -88,4 +88,26 @@ object PhotoUtils {
         val matrix = Matrix().apply { postRotate(rotationDegrees) }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
+
+    fun deletePhotoFile(context: Context, uriString: String?) {
+        if (uriString.isNullOrBlank()) return
+        runCatching {
+            val uri = Uri.parse(uriString)
+            context.contentResolver.delete(uri, null, null)
+            val fileName = uri.lastPathSegment
+            if (!fileName.isNullOrBlank()) {
+                val file = File(File(context.filesDir, "photos"), fileName)
+                if (file.exists()) file.delete()
+            }
+        }
+    }
+
+    fun deleteAllPhotos(context: Context) {
+        runCatching {
+            val photosDir = File(context.filesDir, "photos")
+            if (photosDir.exists() && photosDir.isDirectory) {
+                photosDir.listFiles()?.forEach { it.delete() }
+            }
+        }
+    }
 }

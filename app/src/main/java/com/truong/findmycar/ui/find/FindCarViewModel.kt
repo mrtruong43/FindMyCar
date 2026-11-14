@@ -120,7 +120,7 @@ class FindCarViewModel(
                 PathPoint(x = it.x, y = it.y, relHeightM = it.relHeightM, tMs = it.t)
             }
             val settings = settingsStore.settings.first()
-            stepLengthM = GeoMath.defaultStepLengthM(settings.userHeightM)
+            stepLengthM = settings.effectiveStepLengthM()
             hapticEnabled = settings.hapticFeedbackEnabled
 
             val hasBarometer = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE) != null

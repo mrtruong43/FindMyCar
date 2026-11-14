@@ -47,6 +47,8 @@ import com.truong.findmycar.ui.detail.SpotDetailScreen
 import com.truong.findmycar.ui.detail.SpotDetailViewModel
 import com.truong.findmycar.ui.find.FindCarScreen
 import com.truong.findmycar.ui.find.FindCarViewModel
+import com.truong.findmycar.ui.history.HistoryScreen
+import com.truong.findmycar.ui.history.HistoryViewModel
 import com.truong.findmycar.ui.home.HomeScreen
 import com.truong.findmycar.ui.home.HomeViewModel
 import com.truong.findmycar.ui.onboarding.OnboardingScreen
@@ -146,7 +148,8 @@ fun FindMyCarNavHost(
             val vm: HomeViewModel = viewModel(
                 factory = HomeViewModel.Factory(
                     repository = container.repository,
-                    parkingDetector = container.parkingDetector
+                    parkingDetector = container.parkingDetector,
+                    settingsStore = container.settingsStore
                 )
             )
             HomeScreen(
@@ -196,8 +199,16 @@ fun FindMyCarNavHost(
         }
 
         composable(Routes.HISTORY) {
-            PlaceholderScreen(
-                title = stringResource(R.string.placeholder_history_title),
+            val context = LocalContext.current
+            val vm: HistoryViewModel = viewModel(
+                factory = HistoryViewModel.Factory(
+                    context = context,
+                    repository = container.repository,
+                    settingsStore = container.settingsStore
+                )
+            )
+            HistoryScreen(
+                viewModel = vm,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -205,7 +216,11 @@ fun FindMyCarNavHost(
         composable(Routes.SETTINGS) {
             val context = LocalContext.current
             val vm: SettingsViewModel = viewModel(
-                factory = SettingsViewModel.Factory(context, container.settingsStore)
+                factory = SettingsViewModel.Factory(
+                    context = context,
+                    settingsStore = container.settingsStore,
+                    repository = container.repository
+                )
             )
             SettingsScreen(
                 viewModel = vm,

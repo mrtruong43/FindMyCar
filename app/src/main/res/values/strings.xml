@@ -161,7 +161,53 @@
     <string name="find_no_signal_desc">Vị trí này không có GPS và chưa ghi đường đi. Hãy xem ghi chú, ảnh và tầng bên dưới để tìm xe.</string>
     <string name="find_sheet_no_note">Chưa có ghi chú cho vị trí này.</string>
 
+    <!-- History Screen (M6) -->
+    <string name="history_title">Lịch sử đỗ xe</string>
+    <string name="history_empty">Chưa có lịch sử đỗ xe nào.</string>
+    <string name="history_source_auto">Tự động</string>
+    <string name="history_source_manual">Thủ công</string>
+    <string name="history_status_found">Đã tìm thấy</string>
+    <string name="history_status_archived">Đã lưu trữ</string>
+    <string name="history_delete">Xóa</string>
+    <string name="history_delete_confirm_title">Xóa vị trí này?</string>
+    <string name="history_delete_confirm_body">Thông tin và ảnh đính kèm của lần đỗ xe này sẽ bị xóa vĩnh viễn.</string>
+    <string name="history_share_location">Chia sẻ vị trí</string>
+    <string name="history_share_text_with_coords">Vị trí xe của tôi: https://maps.google.com/?q=%1$.6f,%2$.6f</string>
+    <string name="history_share_chooser">Chia sẻ vị trí xe</string>
+    <string name="history_no_coords_share">Vị trí này không có tọa độ GPS để chia sẻ</string>
+
+    <!-- Settings Calibration & Data Management (M6) -->
+    <string name="settings_step_length_current">Độ dài bước hiện tại: %.2f m</string>
+    <string name="settings_step_length_calibrated">Đã hiệu chỉnh</string>
+    <string name="settings_step_length_default">Mặc định theo chiều cao</string>
+    <string name="settings_calibrate_button">Hiệu chỉnh độ dài bước chân</string>
+    <string name="settings_calibrate_reset">Đặt lại mặc định</string>
+    <string name="settings_clear_data_button">Xóa toàn bộ dữ liệu</string>
+    <string name="settings_clear_data_title">Xóa toàn bộ dữ liệu?</string>
+    <string name="settings_clear_data_body">Tất cả lịch sử đỗ xe, đường đi và ảnh đã chụp sẽ bị xóa vĩnh viễn.</string>
+    <string name="settings_clear_data_done">Đã xóa toàn bộ dữ liệu</string>
+    <string name="common_cancel">Hủy</string>
+    <string name="common_confirm_delete">Xóa</string>
+
+    <!-- Step Calibration Dialog -->
+    <string name="calib_title">Hiệu chỉnh bước chân</string>
+    <string name="calib_instruction">Bấm Bắt đầu, đi bộ thẳng một quãng đã đo trước (ví dụ 20 m), rồi bấm Hoàn thành.</string>
+    <string name="calib_steps_count">Số bước đã đếm: %d</string>
+    <string name="calib_start">Bắt đầu đếm bước</string>
+    <string name="calib_finish">Hoàn thành</string>
+    <string name="calib_distance_label">Quãng đường thực tế (mét)</string>
+    <string name="calib_save">Lưu hiệu chỉnh</string>
+    <string name="calib_invalid">Cần ít nhất 1 bước và quãng đường lớn hơn 0</string>
+    <string name="calib_no_sensor">Máy không hỗ trợ cảm biến đếm bước</string>
+
+    <!-- Home Banners & Accessibility (M6) -->
+    <string name="home_perm_banner_title">Thiếu quyền tự động lưu xe</string>
+    <string name="home_perm_banner_body">Cấp quyền vị trí và nhận diện di chuyển để tự lưu khi bạn rời xe.</string>
+    <string name="home_perm_banner_action">Cấp quyền</string>
+    <string name="home_barometer_missing_notice">Thiết bị không có khí áp kế nên không thể ước tính tầng.</string>
+    <string name="a11y_compass_summary">Xe cách %1$d mét, %2$s</string>
+    <string name="a11y_compass_with_floor">Xe cách %1$d mét, %2$s, %3$s</string>
+
     <!-- Placeholders for M6 -->
-    <string name="placeholder_history_title">Lịch sử đỗ xe</string>
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>
 </resources>

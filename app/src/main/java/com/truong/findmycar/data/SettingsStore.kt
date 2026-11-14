@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.truong.findmycar.util.GeoMath
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -17,8 +18,13 @@ data class AppSettings(
     val floorHeightM: Float = SettingsStore.DEFAULT_FLOOR_HEIGHT_M,
     val autoDetectEnabled: Boolean = SettingsStore.DEFAULT_AUTO_DETECT_ENABLED,
     val hapticFeedbackEnabled: Boolean = SettingsStore.DEFAULT_HAPTIC_FEEDBACK_ENABLED,
-    val onboardingCompleted: Boolean = false
-)
+    val onboardingCompleted: Boolean = false,
+    val calibratedStepLengthM: Float? = null,
+    val barometerNoticeShown: Boolean = false
+) {
+    fun effectiveStepLengthM(): Float =
+        calibratedStepLengthM ?: GeoMath.defaultStepLengthM(userHeightM)
+}
 
 class SettingsStore(private val context: Context) {
 
@@ -28,6 +34,8 @@ class SettingsStore(private val context: Context) {
         val AUTO_DETECT_ENABLED = booleanPreferencesKey("auto_detect_enabled")
         val HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("haptic_feedback_enabled")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val CALIBRATED_STEP_LENGTH_M = floatPreferencesKey("calibrated_step_length_m")
+        val BAROMETER_NOTICE_SHOWN = booleanPreferencesKey("barometer_notice_shown")
     }
 
     val settings: Flow<AppSettings> = context.settingsDataStore.data.map { prefs ->
@@ -36,7 +44,9 @@ class SettingsStore(private val context: Context) {
             floorHeightM = prefs[Keys.FLOOR_HEIGHT_M] ?: DEFAULT_FLOOR_HEIGHT_M,
             autoDetectEnabled = prefs[Keys.AUTO_DETECT_ENABLED] ?: DEFAULT_AUTO_DETECT_ENABLED,
             hapticFeedbackEnabled = prefs[Keys.HAPTIC_FEEDBACK_ENABLED] ?: DEFAULT_HAPTIC_FEEDBACK_ENABLED,
-            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false
+            onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
+            calibratedStepLengthM = prefs[Keys.CALIBRATED_STEP_LENGTH_M],
+            barometerNoticeShown = prefs[Keys.BAROMETER_NOTICE_SHOWN] ?: false
         )
     }
 
@@ -67,6 +77,22 @@ class SettingsStore(private val context: Context) {
     suspend fun setOnboardingCompleted(completed: Boolean) {
         context.settingsDataStore.edit { prefs ->
             prefs[Keys.ONBOARDING_COMPLETED] = completed
+        }
+    }
+
+    suspend fun setCalibratedStepLengthM(stepLengthM: Float?) {
+        context.settingsDataStore.edit { prefs ->
+            if (stepLengthM == null) {
+                prefs.remove(Keys.CALIBRATED_STEP_LENGTH_M)
+            } else {
+                prefs[Keys.CALIBRATED_STEP_LENGTH_M] = stepLengthM
+            }
+        }
+    }
+
+    suspend fun setBarometerNoticeShown(shown: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[Keys.BAROMETER_NOTICE_SHOWN] = shown
         }
     }
 

@@ -164,7 +164,7 @@ class TrackingService : Service() {
         val app = applicationContext as? FindMyCarApp ?: return
         serviceScope.launch(Dispatchers.IO) {
             val settings = app.container.settingsStore.settings.first()
-            stepLengthM = GeoMath.defaultStepLengthM(settings.userHeightM)
+            stepLengthM = settings.effectiveStepLengthM()
             val spot = if (spotId > 0L) app.container.repository.getSpotById(spotId)
             else app.container.repository.getActiveSpotOnce()
 

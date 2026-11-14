@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.truong.findmycar.data.ParkingRepository
+import com.truong.findmycar.data.SettingsStore
 import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.detect.ParkingDetector
 import com.truong.findmycar.detect.SaveSpotResult
@@ -23,12 +24,15 @@ data class HomeUiState(
     val isSaving: Boolean = false,
     val isTracking: Boolean = false,
     val trackingElapsedSeconds: Long = 0L,
-    val stepCount: Int = 0
+    val stepCount: Int = 0,
+    val autoDetectEnabled: Boolean = true,
+    val barometerNoticeShown: Boolean = false
 )
 
 class HomeViewModel(
     private val repository: ParkingRepository,
-    private val parkingDetector: ParkingDetector
+    private val parkingDetector: ParkingDetector,
+    private val settingsStore: SettingsStore
 ) : ViewModel() {
 
     private val isSavingFlow = MutableStateFlow(false)
@@ -38,14 +42,23 @@ class HomeViewModel(
         isSavingFlow,
         TrackingStateHolder.isTracking,
         TrackingStateHolder.elapsedSeconds,
-        TrackingStateHolder.telemetry
-    ) { spot, isSaving, isTracking, elapsedSec, telemetry ->
+        TrackingStateHolder.telemetry,
+        settingsStore.settings
+    ) { values ->
+        val spot = values[0] as ParkingSpotEntity?
+        val isSaving = values[1] as Boolean
+        val isTracking = values[2] as Boolean
+        val elapsedSec = values[3] as Long
+        val telemetry = values[4] as com.truong.findmycar.tracking.TrackingTelemetry
+        val settings = values[5] as com.truong.findmycar.data.AppSettings
         HomeUiState(
             activeSpot = spot,
             isSaving = isSaving,
             isTracking = isTracking,
             trackingElapsedSeconds = elapsedSec,
-            stepCount = telemetry.stepCount
+            stepCount = telemetry.stepCount,
+            autoDetectEnabled = settings.autoDetectEnabled,
+            barometerNoticeShown = settings.barometerNoticeShown
         )
     }.stateIn(
         scope = viewModelScope,
@@ -75,13 +88,20 @@ class HomeViewModel(
         }
     }
 
+    fun markBarometerNoticeShown() {
+        viewModelScope.launch {
+            settingsStore.setBarometerNoticeShown(true)
+        }
+    }
+
     class Factory(
         private val repository: ParkingRepository,
-        private val parkingDetector: ParkingDetector
+        private val parkingDetector: ParkingDetector,
+        private val settingsStore: SettingsStore
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return HomeViewModel(repository, parkingDetector) as T
+            return HomeViewModel(repository, parkingDetector, settingsStore) as T
         }
     }
 }
