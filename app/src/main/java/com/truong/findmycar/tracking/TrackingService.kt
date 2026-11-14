@@ -17,6 +17,9 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -52,11 +55,13 @@ class TrackingService : Service() {
     private var startTimeMs = 0L
 
     private var currentSpotId: Long = -1L
+    private var spotInitialAccuracyM: Float? = null
     private var stepLengthM: Float = GeoMath.defaultStepLengthM(1.65f)
     private val pathModel = PathModel()
     private var stepSeq = 0
     private var lastStepTimeMs = 0L
     private var isFinalizing = false
+    private var appendMode = false
 
     private val trackPointLock = Any()
     private val pendingTrackPoints = mutableListOf<TrackPointEntity>()
@@ -101,37 +106,42 @@ class TrackingService : Service() {
                 stopTrackingAndSelf()
                 return START_NOT_STICKY
             }
-            ACTION_FINALIZE_ANCHOR -> {
+            ACTION_SET_ANCHOR, ACTION_FINALIZE_ANCHOR -> {
+                triggerConfirmationHaptic()
                 finalizeAnchorAndStop(
                     anchorLat = lastGoodLocation?.latitude,
                     anchorLon = lastGoodLocation?.longitude
                 )
                 return START_NOT_STICKY
             }
-            ACTION_START, null -> {
+            ACTION_START, ACTION_RESUME_APPEND, null -> {
                 val spotId = intent?.getLongExtra(EXTRA_SPOT_ID, -1L) ?: -1L
+                val isAppend = intent?.action == ACTION_RESUME_APPEND ||
+                    (intent?.getBooleanExtra(EXTRA_APPEND_MODE, false) == true)
                 if (!Permissions.hasForegroundLocation(this)) {
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                startTracking(spotId)
+                startTracking(spotId, isAppend)
             }
         }
         return START_STICKY
     }
 
-    private fun startTracking(spotId: Long) {
+    private fun startTracking(spotId: Long, isAppend: Boolean = false) {
         if (TrackingStateHolder.isTracking.value && timerJob?.isActive == true) {
             return
         }
 
         currentSpotId = spotId
+        appendMode = isAppend
         startTimeMs = System.currentTimeMillis()
         lastStepTimeMs = startTimeMs
         stepSeq = 0
         isFinalizing = false
         goodFixStartMs = null
         lastGoodLocation = null
+        spotInitialAccuracyM = null
         pathModel.reset()
         synchronized(trackPointLock) { pendingTrackPoints.clear() }
         TrackingStateHolder.setStarted(spotId)
@@ -168,12 +178,27 @@ class TrackingService : Service() {
             val spot = if (spotId > 0L) app.container.repository.getSpotById(spotId)
             else app.container.repository.getActiveSpotOnce()
 
-            if (spot != null && currentSpotId <= 0L) {
-                currentSpotId = spot.id
+            if (spot != null) {
+                if (currentSpotId <= 0L) currentSpotId = spot.id
+                spotInitialAccuracyM = spot.accuracyM
             }
 
-            // Insert origin (0, 0) point
-            if (currentSpotId > 0L) {
+            if (appendMode && currentSpotId > 0L) {
+                val existing = app.container.repository.getTrackPoints(currentSpotId)
+                if (existing.isNotEmpty()) {
+                    pathModel.loadExisting(
+                        existing.map {
+                            PathPoint(x = it.x, y = it.y, relHeightM = it.relHeightM, tMs = it.t)
+                        }
+                    )
+                    stepSeq = existing.last().seq
+                    val lastPt = existing.last()
+                    TrackingStateHolder.updateTelemetry {
+                        it.copy(stepCount = stepSeq, x = lastPt.x, y = lastPt.y)
+                    }
+                }
+            } else if (currentSpotId > 0L) {
+                // Insert origin (0, 0) point
                 synchronized(trackPointLock) {
                     pendingTrackPoints.add(
                         TrackPointEntity(
@@ -296,6 +321,21 @@ class TrackingService : Service() {
                 val loc = result.lastLocation ?: return
                 if (loc.hasAccuracy() && loc.accuracy < ANCHOR_ACCURACY_THRESHOLD_M) {
                     lastGoodLocation = loc
+                    // 3-Layer Underground Auto-Anchor Filter:
+                    // Layer 1: Parking originated underground/indoors (accuracy == null || > 25m)
+                    val originatedUnderground = spotInitialAccuracyM == null ||
+                        spotInitialAccuracyM!! > UNDERGROUND_ORIGIN_ACCURACY_M
+                    // Layer 2: >= 15 steps OR >= 1.5m barometric altitude change
+                    val relHeight = kotlin.math.abs(pressureAdapter?.latestReading?.relHeightM ?: 0f)
+                    val sufficientMovement = stepSeq >= MIN_AUTO_ANCHOR_STEPS ||
+                        relHeight >= MIN_AUTO_ANCHOR_ALT_CHANGE_M
+
+                    if (!originatedUnderground || !sufficientMovement) {
+                        goodFixStartMs = null
+                        return
+                    }
+
+                    // Layer 3: High-accuracy outdoor GPS (< 15m) persists continuously for 30s
                     val now = System.currentTimeMillis()
                     val started = goodFixStartMs
                     if (started == null) {
@@ -483,6 +523,16 @@ class TrackingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val anchorIntent = Intent(this, TrackingService::class.java).apply {
+            action = ACTION_SET_ANCHOR
+        }
+        val anchorPendingIntent = PendingIntent.getService(
+            this,
+            2,
+            anchorIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val stopIntent = Intent(this, TrackingService::class.java).apply {
             action = ACTION_STOP
         }
@@ -503,10 +553,29 @@ class TrackingService : Service() {
             .setContentIntent(contentPendingIntent)
             .addAction(
                 0,
+                getString(R.string.tracking_notif_anchor),
+                anchorPendingIntent
+            )
+            .addAction(
+                0,
                 getString(R.string.tracking_notif_stop),
                 stopPendingIntent
             )
             .build()
+    }
+
+    private fun triggerConfirmationHaptic() {
+        val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+        if (vibrator?.hasVibrator() == true) {
+            runCatching {
+                vibrator.vibrate(VibrationEffect.createOneShot(60L, 180))
+            }
+        }
     }
 
     companion object {
@@ -524,13 +593,19 @@ class TrackingService : Service() {
 
         private const val ANCHOR_GPS_INTERVAL_MS = 3_000L
         private const val ANCHOR_GPS_MIN_INTERVAL_MS = 2_000L
-        private const val ANCHOR_ACCURACY_THRESHOLD_M = 20f
-        private const val ANCHOR_GOOD_FIX_DURATION_MS = 20_000L
+        private const val ANCHOR_ACCURACY_THRESHOLD_M = 15f
+        private const val ANCHOR_GOOD_FIX_DURATION_MS = 30_000L
+        private const val UNDERGROUND_ORIGIN_ACCURACY_M = 25f
+        private const val MIN_AUTO_ANCHOR_STEPS = 15
+        private const val MIN_AUTO_ANCHOR_ALT_CHANGE_M = 1.5f
 
         const val ACTION_START = "com.truong.findmycar.action.START_TRACKING"
+        const val ACTION_RESUME_APPEND = "com.truong.findmycar.action.RESUME_APPEND_TRACKING"
         const val ACTION_STOP = "com.truong.findmycar.action.STOP_TRACKING"
+        const val ACTION_SET_ANCHOR = "com.truong.findmycar.action.SET_ANCHOR"
         const val ACTION_FINALIZE_ANCHOR = "com.truong.findmycar.action.FINALIZE_ANCHOR"
         const val EXTRA_SPOT_ID = "extra_spot_id"
+        const val EXTRA_APPEND_MODE = "extra_append_mode"
 
         fun formatDurationMmSs(totalSeconds: Long): String {
             val mins = totalSeconds / 60L
@@ -538,11 +613,12 @@ class TrackingService : Service() {
             return String.format(Locale.US, "%02d:%02d", mins, secs)
         }
 
-        fun start(context: Context, spotId: Long) {
+        fun start(context: Context, spotId: Long, appendMode: Boolean = false) {
             if (!Permissions.hasForegroundLocation(context)) return
             val intent = Intent(context, TrackingService::class.java).apply {
-                action = ACTION_START
+                action = if (appendMode) ACTION_RESUME_APPEND else ACTION_START
                 putExtra(EXTRA_SPOT_ID, spotId)
+                putExtra(EXTRA_APPEND_MODE, appendMode)
             }
             ContextCompat.startForegroundService(context, intent)
         }

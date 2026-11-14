@@ -54,6 +54,15 @@ class PathModel {
         _points.add(PathPoint(0f, 0f, 0f, 0L))
     }
 
+    fun loadExisting(existing: List<PathPoint>) {
+        _points.clear()
+        if (existing.isEmpty()) {
+            _points.add(PathPoint(0f, 0f, 0f, 0L))
+        } else {
+            _points.addAll(existing)
+        }
+    }
+
     companion object {
         fun totalLengthMeters(polyline: List<PathPoint>): Float {
             if (polyline.size < 2) return 0f

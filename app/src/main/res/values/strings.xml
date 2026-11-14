@@ -39,6 +39,7 @@
     <string name="tracking_notif_channel_desc">Hiển thị khi ứng dụng đang ghi lại đường đi bộ ra khỏi xe</string>
     <string name="tracking_notif_title">Đang ghi đường đi từ xe</string>
     <string name="tracking_notif_text">Đã ghi %s • Chạm để mở</string>
+    <string name="tracking_notif_anchor">Chốt lối ra / thang máy</string>
     <string name="tracking_notif_stop">Dừng ghi</string>
 
     <!-- Elapsed Time -->
@@ -207,6 +208,15 @@
     <string name="home_barometer_missing_notice">Thiết bị không có khí áp kế nên không thể ước tính tầng.</string>
     <string name="a11y_compass_summary">Xe cách %1$d mét, %2$s</string>
     <string name="a11y_compass_with_floor">Xe cách %1$d mét, %2$s, %3$s</string>
+
+    <!-- Editable Anchor Sheet -->
+    <string name="anchor_edit_button">Sửa lối ra/thang máy</string>
+    <string name="anchor_edit_title">Chỉnh sửa lối ra / thang máy</string>
+    <string name="anchor_option_update">Cập nhật neo tại vị trí đang đứng</string>
+    <string name="anchor_option_clear">Xóa điểm neo (dùng GPS trực tiếp tới xe)</string>
+    <string name="anchor_option_append">Ghi tiếp dấu chân từ đây</string>
+    <string name="anchor_updated_toast">Đã cập nhật vị trí lối ra/thang máy</string>
+    <string name="anchor_cleared_toast">Đã xóa điểm neo, sẽ dẫn đường trực tiếp tới xe</string>
 
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>

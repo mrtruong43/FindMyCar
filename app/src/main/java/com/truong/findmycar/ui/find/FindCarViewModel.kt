@@ -132,7 +132,9 @@ class FindCarViewModel(
                 anchorRelHeightM = spot?.anchorRelHeightM,
                 footprint = trackPoints,
                 floorHeightM = settings.floorHeightM,
-                hasBarometer = hasBarometer
+                hasBarometer = hasBarometer,
+                carAccuracyM = spot?.accuracyM,
+                anchorSet = spot?.anchorSet ?: false
             )
             val createdEngine = GuidanceEngine(targetInfo)
             engine = createdEngine

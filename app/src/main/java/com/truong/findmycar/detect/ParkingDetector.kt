@@ -24,8 +24,10 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.truong.findmycar.MainActivity
 import com.truong.findmycar.R
 import com.truong.findmycar.data.ParkingRepository
+import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.data.db.SpotSource
 import com.truong.findmycar.tracking.TrackingService
+import com.truong.findmycar.util.GeoMath
 import com.truong.findmycar.util.Permissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,6 +78,28 @@ class ParkingDetector(
 
         stateMachine.recordSpotSaved(nowMs)
         executeParkingSave(source = SpotSource.MANUAL, fromAutoDetect = false)
+    }
+
+    suspend fun updateAnchorToCurrentPosition(spot: ParkingSpotEntity): Boolean = coroutineScope {
+        val locationDeferred = async { fetchCurrentLocationWithTimeout(LOCATION_TIMEOUT_MS) }
+        val pressureDeferred = async { sampleBarometerPressure(PRESSURE_SAMPLE_DURATION_MS) }
+
+        val loc = locationDeferred.await()
+        val pressureHpa = pressureDeferred.await()
+        val relHeight = if (pressureHpa != null && spot.pressureHpa != null) {
+            GeoMath.relativeAltitudeMeters(pressureHpa, spot.pressureHpa)
+        } else {
+            spot.anchorRelHeightM
+        }
+
+        repository.finalizeAnchor(
+            spotId = spot.id,
+            anchorLat = loc?.latitude,
+            anchorLon = loc?.longitude,
+            anchorPressureHpa = pressureHpa ?: spot.anchorPressureHpa,
+            anchorRelHeightM = relHeight
+        )
+        true
     }
 
     suspend fun onActivityTransition(

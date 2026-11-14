@@ -12,8 +12,8 @@
   - Jetpack Compose (Material 3, Dark Mode mặc định, tắt Dynamic Color, màu nhấn `#2EE6A6`).
   - Room `2.7.2`, DataStore Preferences `1.1.7`, Navigation Compose `2.9.0`, Google Play Services Location `21.3.0`.
   - **Lưu ý build CLI:** Cần trỏ `JAVA_HOME` tới JDK 17 (`C:\Users\Thu\AppData\Local\Programs\openjdk-17\jdk-17.0.19+10`).
-- **File APK hiện tại:** `findmycar-debug.apk` (`12,817,922` bytes / ~12.22 MB).
-- **Unit test:** 22/22 test pass trên JVM (không phụ thuộc thiết bị Android).
+- **File APK hiện tại:** `findmycar-debug.apk` (`12,854,198` bytes / ~12.26 MB).
+- **Unit test:** 24/24 test pass trên JVM (không phụ thuộc thiết bị Android).
 
 ---
 
@@ -36,7 +36,7 @@ app/src/main/java/com/truong/findmycar/
 │   └── ParkingDetector.kt            # Lưu thủ công & tự động, LocationUpdates khi lái xe, barometer 2s, notification
 ├── guidance/
 │   ├── CircularFilter.kt           # Thuần Kotlin: lọc thông thấp góc trên sin/cos
-│   └── GuidanceEngine.kt           # Thuần Kotlin: điều hướng 2 pha (GPS tới neo -> đảo dấu chân trong hầm), <8m Rất gần
+│   └── GuidanceEngine.kt           # Thuần Kotlin: điều hướng 2 pha (GPS tới neo -> đảo dấu chân hầm), chế độ ngoài trời thẳng tới xe, guard VERY_CLOSE
 ├── tracking/
 │   ├── HeadingEstimator.kt         # Thuần Kotlin: Mode A + Mode B (PCA 2x2)
 │   ├── PressureAltimeter.kt        # Thuần Kotlin: trung bình trượt 1.5s + lọc thông thấp
@@ -45,10 +45,10 @@ app/src/main/java/com/truong/findmycar/
 │   ├── HeadingSensorAdapter.kt     # SensorAdapter: TYPE_ROTATION_VECTOR + TYPE_LINEAR_ACCELERATION + giảm tần số khi đứng yên 10s
 │   ├── PressureSensorAdapter.kt    # SensorAdapter: TYPE_PRESSURE
 │   ├── TrackingStateHolder.kt      # StateFlow: telemetry realtime + bộ đệm log CSV
-│   └── TrackingService.kt          # Foreground Service: ghi dấu chân theo lô (10 điểm / 5s), chốt neo, auto-stop 30p/pin <10%
+│   └── TrackingService.kt          # Foreground Service: ghi dấu chân theo lô, nút thông báo "Chốt lối ra / thang máy", bộ lọc neo hầm 3 lớp, ghi tiếp dấu chân
 ├── ui/
 │   ├── theme/                      # Color.kt, Shape.kt, Type.kt, Theme.kt
-│   ├── components/                 # ArrowCompass.kt, FloorBadge.kt (TalkBack), TimeFormat.kt, BatteryOptimizationCard.kt
+│   ├── components/                 # ArrowCompass.kt, FloorBadge.kt, TimeFormat.kt, BatteryOptimizationCard.kt, EditAnchorBottomSheet.kt
 │   ├── onboarding/                 # OnboardingScreen.kt (3 bước, xin quyền 2 bước, tối ưu pin Samsung)
 │   ├── home/                       # HomeViewModel.kt, HomeScreen.kt (banner thiếu quyền, thông báo thiếu khí áp kế, TalkBack)
 │   ├── detail/                     # SpotDetailViewModel.kt, SpotDetailScreen.kt (ghi chú, giọng nói vi-VN, ảnh, geo:)

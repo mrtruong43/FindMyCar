@@ -115,4 +115,64 @@ class GuidanceEngineTest {
         assertEquals(GuidancePhase.NO_SIGNAL_FALLBACK, state.phase)
         assertNull(state.distanceMeters)
     }
+
+    @Test
+    fun outdoorSpot200mAwayStaysInPhase1GpsToCarAndRequiresGoodAccuracyForVeryClose() {
+        val carLat = 10.7769
+        val carLon = 106.7009
+        val engine = GuidanceEngine(
+            GuidanceTargetInfo(
+                carLat = carLat,
+                carLon = carLon,
+                anchorLat = 10.7770,
+                anchorLon = 106.7010,
+                anchorRelHeightM = 0.5f,
+                footprint = listOf(PathPoint(0f, 0f), PathPoint(0f, 20f)),
+                carAccuracyM = 8f,
+                anchorSet = true
+            )
+        )
+
+        // Outdoor spot must start in PHASE1_GPS_TO_CAR directly toward car
+        assertEquals(GuidancePhase.PHASE1_GPS_TO_CAR, engine.currentState().phase)
+
+        // ~200m north of car -> stays PHASE1_GPS_TO_CAR (~200m)
+        val farState = engine.onGpsUpdate(lat = carLat + 0.0018, lon = carLon, accuracyM = 10f)
+        assertEquals(GuidancePhase.PHASE1_GPS_TO_CAR, farState.phase)
+        assertTrue((farState.distanceMeters ?: 0f) > 180f)
+
+        // Within 5m but poor accuracy (40m) -> must NOT jump to VERY_CLOSE
+        val inaccurateState = engine.onGpsUpdate(lat = carLat + 0.00004, lon = carLon, accuracyM = 40f)
+        assertEquals(GuidancePhase.PHASE1_GPS_TO_CAR, inaccurateState.phase)
+
+        // Within 5m AND good accuracy (8m) -> transitions to VERY_CLOSE
+        val closeState = engine.onGpsUpdate(lat = carLat + 0.00004, lon = carLon, accuracyM = 8f)
+        assertEquals(GuidancePhase.VERY_CLOSE, closeState.phase)
+    }
+
+    @Test
+    fun phase2StartsAtAnchorEndpointWithFullRemainingDistance() {
+        val engine = GuidanceEngine(
+            GuidanceTargetInfo(
+                carLat = null,
+                carLon = null,
+                anchorLat = 10.7775,
+                anchorLon = 106.7015,
+                anchorRelHeightM = -3.2f,
+                footprint = listOf(
+                    PathPoint(0f, 0f),
+                    PathPoint(0f, 100f),
+                    PathPoint(0f, 200f)
+                ),
+                carAccuracyM = 50f,
+                anchorSet = true
+            )
+        )
+
+        assertEquals(GuidancePhase.PHASE1_GPS_TO_ANCHOR, engine.currentState().phase)
+        val p2State = engine.enterPhase2()
+        assertEquals(GuidancePhase.PHASE2_FOOTPRINT, p2State.phase)
+        // Must start at anchor endpoint (0, 200) -> ~200m remaining to car (0, 0), NOT VERY_CLOSE
+        assertEquals(200f, p2State.distanceMeters ?: 0f, 1.0f)
+    }
 }

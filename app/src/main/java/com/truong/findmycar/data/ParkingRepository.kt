@@ -84,6 +84,10 @@ class ParkingRepository(
         )
     }
 
+    suspend fun clearAnchor(spotId: Long) {
+        parkingSpotDao.clearAnchor(spotId)
+    }
+
     suspend fun insertTrackPoints(points: List<TrackPointEntity>) {
         if (points.isNotEmpty()) {
             trackPointDao.insertAll(points)

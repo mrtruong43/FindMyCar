@@ -71,6 +71,19 @@ interface ParkingSpotDao {
         anchorRelHeightM: Float?
     )
 
+    @Query(
+        """
+        UPDATE parking_spots
+        SET anchorSet = 0,
+            anchorLat = NULL,
+            anchorLon = NULL,
+            anchorPressureHpa = NULL,
+            anchorRelHeightM = NULL
+        WHERE id = :spotId
+        """
+    )
+    suspend fun clearAnchor(spotId: Long)
+
     @Query("DELETE FROM parking_spots WHERE id = :spotId")
     suspend fun deleteById(spotId: Long)
 

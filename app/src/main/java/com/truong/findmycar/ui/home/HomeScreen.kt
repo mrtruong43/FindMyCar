@@ -79,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.truong.findmycar.R
 import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.tracking.TrackingService
+import com.truong.findmycar.ui.components.EditAnchorBottomSheet
 import com.truong.findmycar.ui.components.FloorBadge
 import com.truong.findmycar.ui.components.formatElapsedTime
 import com.truong.findmycar.ui.theme.WarningAmber
@@ -98,6 +99,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
+    var showEditAnchorSheet by remember { mutableStateOf(false) }
 
     var hasMissingAutoDetectPerm by remember {
         mutableStateOf(
@@ -165,6 +167,12 @@ fun HomeScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.anchorActionMessageRes.collect { resId ->
+            snackbarHostState.showSnackbar(context.getString(resId))
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -223,6 +231,9 @@ fun HomeScreen(
                         onAnchorReachedClick = {
                             TrackingService.finalizeAnchor(context)
                         },
+                        onEditAnchorClick = {
+                            showEditAnchorSheet = true
+                        },
                         onStartTrackingTestClick = {
                             if (Permissions.hasForegroundLocation(context)) {
                                 TrackingService.start(context, spot.id)
@@ -235,6 +246,22 @@ fun HomeScreen(
             }
             }
         }
+    }
+
+    val activeSpot = uiState.activeSpot
+    if (showEditAnchorSheet && activeSpot != null) {
+        EditAnchorBottomSheet(
+            onDismiss = { showEditAnchorSheet = false },
+            onUpdateAnchorHere = { viewModel.updateAnchorHere(activeSpot) },
+            onClearAnchor = { viewModel.clearAnchor(activeSpot.id) },
+            onResumeAppendFootprint = {
+                if (Permissions.hasForegroundLocation(context)) {
+                    TrackingService.start(context, activeSpot.id, appendMode = true)
+                } else {
+                    permissionLauncher.launch(Permissions.FOREGROUND_LOCATION_PERMISSIONS)
+                }
+            }
+        )
     }
 }
 
@@ -456,6 +483,7 @@ private fun ActiveHomeContent(
     onFindClick: () -> Unit,
     onOverwriteSaveClick: () -> Unit,
     onAnchorReachedClick: () -> Unit,
+    onEditAnchorClick: () -> Unit,
     onStartTrackingTestClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -604,6 +632,7 @@ private fun ActiveHomeContent(
             stepCount = stepCount,
             anchorSet = spot.anchorSet,
             onAnchorReachedClick = onAnchorReachedClick,
+            onEditAnchorClick = onEditAnchorClick,
             onStartTrackingTestClick = onStartTrackingTestClick
         )
 
@@ -673,6 +702,7 @@ private fun TrackingStatusCard(
     stepCount: Int,
     anchorSet: Boolean,
     onAnchorReachedClick: () -> Unit,
+    onEditAnchorClick: () -> Unit,
     onStartTrackingTestClick: () -> Unit
 ) {
     Surface(
@@ -727,6 +757,20 @@ private fun TrackingStatusCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
+                OutlinedButton(
+                    onClick = onEditAnchorClick,
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.anchor_edit_button),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

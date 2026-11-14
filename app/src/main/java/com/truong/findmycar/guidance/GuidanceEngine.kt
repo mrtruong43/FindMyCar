@@ -4,6 +4,7 @@ import com.truong.findmycar.tracking.PathModel
 import com.truong.findmycar.tracking.PathPoint
 import com.truong.findmycar.tracking.PressureAltimeter
 import com.truong.findmycar.util.GeoMath
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -24,7 +25,9 @@ data class GuidanceTargetInfo(
     val anchorRelHeightM: Float?,
     val footprint: List<PathPoint>,
     val floorHeightM: Float = 3.2f,
-    val hasBarometer: Boolean = true
+    val hasBarometer: Boolean = true,
+    val carAccuracyM: Float? = null,
+    val anchorSet: Boolean = false
 )
 
 data class GuidanceState(
@@ -53,12 +56,22 @@ class GuidanceEngine(
     private val hasFootprint = info.footprint.size >= 2
     private val reversedPolyline: List<PathPoint> =
         if (hasFootprint) PathModel.reversedPath(info.footprint) else emptyList()
+    private val totalPolylineLengthM: Float =
+        if (hasFootprint) PathModel.totalLengthMeters(reversedPolyline) else 0f
 
-    private val targetGpsLat: Double? = info.anchorLat ?: info.carLat
-    private val targetGpsLon: Double? = info.anchorLon ?: info.carLon
+    private val isOutdoorSpot: Boolean =
+        info.carLat != null &&
+            info.carLon != null &&
+            info.carAccuracyM != null &&
+            info.carAccuracyM <= OUTDOOR_ORIGIN_ACCURACY_M &&
+            abs(info.anchorRelHeightM ?: 0f) < OUTDOOR_MAX_REL_HEIGHT_M
+
+    private val targetGpsLat: Double? = if (isOutdoorSpot) info.carLat else (info.anchorLat ?: info.carLat)
+    private val targetGpsLon: Double? = if (isOutdoorSpot) info.carLon else (info.anchorLon ?: info.carLon)
     private val hasTargetGps: Boolean = targetGpsLat != null && targetGpsLon != null
 
     private var phase: GuidancePhase = when {
+        isOutdoorSpot -> GuidancePhase.PHASE1_GPS_TO_CAR
         !hasFootprint && !hasTargetGps -> GuidancePhase.NO_SIGNAL_FALLBACK
         !hasFootprint && hasTargetGps -> GuidancePhase.PHASE1_GPS_TO_CAR
         hasFootprint && hasTargetGps -> GuidancePhase.PHASE1_GPS_TO_ANCHOR
@@ -68,7 +81,7 @@ class GuidanceEngine(
     private var latestAzimuthDeg: Float = 0f
     private var targetBearingDeg: Float = 0f
     private var distanceMeters: Float? = if (phase == GuidancePhase.PHASE2_FOOTPRINT) {
-        PathModel.totalLengthMeters(reversedPolyline)
+        totalPolylineLengthM
     } else {
         null
     }
@@ -83,7 +96,7 @@ class GuidanceEngine(
 
     init {
         if (phase == GuidancePhase.PHASE2_FOOTPRINT) {
-            recomputePhase2Guidance()
+            recomputePhase2Guidance(isInitial = true)
         }
     }
 
@@ -137,7 +150,10 @@ class GuidanceEngine(
         if (phase == GuidancePhase.PHASE1_GPS_TO_ANCHOR && dist < PHASE2_TRANSITION_DISTANCE_M) {
             return enterPhase2(currentPressureHpa)
         }
-        if (phase == GuidancePhase.PHASE1_GPS_TO_CAR && dist < VERY_CLOSE_DISTANCE_M) {
+        if (phase == GuidancePhase.PHASE1_GPS_TO_CAR &&
+            dist < OUTDOOR_VERY_CLOSE_DISTANCE_M &&
+            accuracyM <= OUTDOOR_VERY_CLOSE_MAX_ACCURACY_M
+        ) {
             phase = GuidancePhase.VERY_CLOSE
         }
 
@@ -156,7 +172,7 @@ class GuidanceEngine(
                 floorHeightM = info.floorHeightM
             )
         }
-        recomputePhase2Guidance()
+        recomputePhase2Guidance(isInitial = true)
         return currentState()
     }
 
@@ -194,7 +210,7 @@ class GuidanceEngine(
         return currentState()
     }
 
-    private fun recomputePhase2Guidance() {
+    private fun recomputePhase2Guidance(isInitial: Boolean = false) {
         if (reversedPolyline.isEmpty()) return
         val proj = PathModel.projectOntoPolyline(currentX, currentY, reversedPolyline)
         val lookahead = PathModel.lookaheadPoint(proj, reversedPolyline, LOOKAHEAD_METERS)
@@ -206,8 +222,10 @@ class GuidanceEngine(
         distanceMeters = proj.remainingDistanceM
         updateArrowFilter()
 
-        if (proj.remainingDistanceM < VERY_CLOSE_DISTANCE_M) {
-            phase = GuidancePhase.VERY_CLOSE
+        if (!isInitial || totalPolylineLengthM <= MIN_INITIAL_POLYLINE_FOR_VERY_CLOSE_GUARD_M) {
+            if (proj.remainingDistanceM < VERY_CLOSE_DISTANCE_M) {
+                phase = GuidancePhase.VERY_CLOSE
+            }
         }
     }
 
@@ -219,6 +237,11 @@ class GuidanceEngine(
     companion object {
         const val PHASE2_TRANSITION_DISTANCE_M = 15f
         const val VERY_CLOSE_DISTANCE_M = 8f
+        const val OUTDOOR_VERY_CLOSE_DISTANCE_M = 10f
+        const val OUTDOOR_VERY_CLOSE_MAX_ACCURACY_M = 25f
+        const val OUTDOOR_ORIGIN_ACCURACY_M = 20f
+        const val OUTDOOR_MAX_REL_HEIGHT_M = 2.0f
+        const val MIN_INITIAL_POLYLINE_FOR_VERY_CLOSE_GUARD_M = 15f
         const val LOOKAHEAD_METERS = 6.5f
         const val WEAK_GPS_ACCURACY_M = 35f
 

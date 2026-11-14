@@ -69,6 +69,9 @@ class HomeViewModel(
     private val _saveEvents = MutableSharedFlow<SaveSpotResult>(extraBufferCapacity = 1)
     val saveEvents: SharedFlow<SaveSpotResult> = _saveEvents.asSharedFlow()
 
+    private val _anchorActionMessageRes = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    val anchorActionMessageRes: SharedFlow<Int> = _anchorActionMessageRes.asSharedFlow()
+
     fun saveManualSpot() {
         if (isSavingFlow.value) return
         viewModelScope.launch {
@@ -85,6 +88,21 @@ class HomeViewModel(
     fun markAnchorReached(spotId: Long) {
         viewModelScope.launch {
             repository.markAnchorSet(spotId)
+        }
+    }
+
+    fun updateAnchorHere(spot: ParkingSpotEntity) {
+        viewModelScope.launch {
+            if (parkingDetector.updateAnchorToCurrentPosition(spot)) {
+                _anchorActionMessageRes.tryEmit(com.truong.findmycar.R.string.anchor_updated_toast)
+            }
+        }
+    }
+
+    fun clearAnchor(spotId: Long) {
+        viewModelScope.launch {
+            repository.clearAnchor(spotId)
+            _anchorActionMessageRes.tryEmit(com.truong.findmycar.R.string.anchor_cleared_toast)
         }
     }
 

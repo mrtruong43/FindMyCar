@@ -62,7 +62,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.truong.findmycar.R
+import com.truong.findmycar.tracking.TrackingService
+import com.truong.findmycar.ui.components.EditAnchorBottomSheet
 import com.truong.findmycar.util.GeoMath
+import com.truong.findmycar.util.Permissions
 import com.truong.findmycar.util.PhotoUtils
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -80,6 +83,22 @@ fun SpotDetailScreen(
     val scope = rememberCoroutineScope()
 
     var pendingPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var showEditAnchorSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.anchorActionMessageRes.collect { resId ->
+            snackbarHostState.showSnackbar(context.getString(resId))
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        val currentSpot = uiState.spot
+        if (currentSpot != null && Permissions.hasForegroundLocation(context)) {
+            TrackingService.start(context, currentSpot.id, appendMode = true)
+        }
+    }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
@@ -352,6 +371,23 @@ fun SpotDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    if (spot?.anchorSet == true) {
+                        OutlinedButton(
+                            onClick = { showEditAnchorSheet = true },
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.anchor_edit_button),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
 
                     val hasCoords = spot?.lat != null && spot.lon != null
@@ -395,5 +431,20 @@ fun SpotDetailScreen(
                 }
             }
         }
+    }
+
+    if (showEditAnchorSheet && spot != null) {
+        EditAnchorBottomSheet(
+            onDismiss = { showEditAnchorSheet = false },
+            onUpdateAnchorHere = { viewModel.updateAnchorHere(spot) },
+            onClearAnchor = { viewModel.clearAnchor(spot.id) },
+            onResumeAppendFootprint = {
+                if (Permissions.hasForegroundLocation(context)) {
+                    TrackingService.start(context, spot.id, appendMode = true)
+                } else {
+                    locationPermissionLauncher.launch(Permissions.FOREGROUND_LOCATION_PERMISSIONS)
+                }
+            }
+        )
     }
 }

@@ -169,7 +169,8 @@ fun FindMyCarNavHost(
             val vm: SpotDetailViewModel = viewModel(
                 factory = SpotDetailViewModel.Factory(
                     spotId = spotId,
-                    repository = container.repository
+                    repository = container.repository,
+                    parkingDetector = container.parkingDetector
                 )
             )
             SpotDetailScreen(
