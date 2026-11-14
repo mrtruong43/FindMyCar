@@ -23,10 +23,12 @@ import com.truong.findmycar.data.ParkingRepository
 import com.truong.findmycar.data.SettingsStore
 import com.truong.findmycar.data.VehicleHologramType
 import com.truong.findmycar.data.db.ParkingSpotEntity
+import com.truong.findmycar.guidance.CircularFilter
 import com.truong.findmycar.guidance.GuidanceEngine
 import com.truong.findmycar.guidance.GuidancePhase
 import com.truong.findmycar.guidance.GuidanceState
 import com.truong.findmycar.guidance.GuidanceTargetInfo
+import com.truong.findmycar.tracking.HeadingSensorAdapter
 import com.truong.findmycar.tracking.PathPoint
 import com.truong.findmycar.tracking.TrackingService
 import com.truong.findmycar.util.GeoMath
@@ -80,7 +82,9 @@ class FindCarViewModel(
     private var wasVeryClose = false
 
     private val rotationMatrix = FloatArray(9)
+    private val remappedMatrix = FloatArray(9)
     private val orientation = FloatArray(3)
+    private val azimuthFilter = CircularFilter(alpha = 0.30f)
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
@@ -89,11 +93,16 @@ class FindCarViewModel(
                 Sensor.TYPE_ROTATION_VECTOR -> {
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
                     SensorManager.getOrientation(rotationMatrix, orientation)
-                    val azimuthDeg = GeoMath.normalizeAngleDegrees(
-                        Math.toDegrees(orientation[0].toDouble()).toFloat()
+                    val pitchDeg = Math.toDegrees(orientation[1].toDouble()).toFloat()
+                    val rawAzimuthDeg = HeadingSensorAdapter.computeTiltCompensatedAzimuthDeg(
+                        rotationMatrix = rotationMatrix,
+                        remappedMatrix = remappedMatrix,
+                        orientationOut = orientation,
+                        pitchDeg = pitchDeg
                     )
-                    _uiState.value = _uiState.value.copy(userHeadingDeg = azimuthDeg)
-                    updateGuidanceState(g.onAzimuthUpdate(azimuthDeg))
+                    val filteredAzimuthDeg = azimuthFilter.update(rawAzimuthDeg)
+                    _uiState.value = _uiState.value.copy(userHeadingDeg = filteredAzimuthDeg)
+                    updateGuidanceState(g.onAzimuthUpdate(filteredAzimuthDeg))
                 }
                 Sensor.TYPE_STEP_DETECTOR -> {
                     updateGuidanceState(g.onStep(stepLengthM))

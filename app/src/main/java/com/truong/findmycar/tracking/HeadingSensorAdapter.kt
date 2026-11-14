@@ -35,6 +35,7 @@ class HeadingSensorAdapter(
 
     private val estimator = HeadingEstimator()
     private val rotationMatrix = FloatArray(9)
+    private val remappedMatrix = FloatArray(9)
     private val orientationAngles = FloatArray(3)
 
     private var hasRotationMatrix = false
@@ -56,11 +57,14 @@ class HeadingSensorAdapter(
                     SensorManager.getOrientation(rotationMatrix, orientationAngles)
                     hasRotationMatrix = true
 
-                    latestAzimuthDeg = GeoMath.normalizeAngleDegrees(
-                        Math.toDegrees(orientationAngles[0].toDouble()).toFloat()
-                    )
                     latestPitchDeg = Math.toDegrees(orientationAngles[1].toDouble()).toFloat()
                     latestRollDeg = Math.toDegrees(orientationAngles[2].toDouble()).toFloat()
+                    latestAzimuthDeg = computeTiltCompensatedAzimuthDeg(
+                        rotationMatrix = rotationMatrix,
+                        remappedMatrix = remappedMatrix,
+                        orientationOut = orientationAngles,
+                        pitchDeg = latestPitchDeg
+                    )
 
                     if (isHandHeldPosture()) {
                         val est = estimator.updateHandHeldAzimuth(latestAzimuthDeg)
@@ -106,8 +110,8 @@ class HeadingSensorAdapter(
     }
 
     private fun isHandHeldPosture(): Boolean {
-        // Hand-held posture: phone tilted forward 10°..75° and roll < 45°
-        return abs(latestPitchDeg) in 10f..75f && abs(latestRollDeg) < 45f
+        // Hand-held posture: phone tilted 5°..88° (flat to upright) and roll < 45°
+        return abs(latestPitchDeg) in 5f..88f && abs(latestRollDeg) < 45f
     }
 
     private fun updateSnapshot(snapshot: HeadingSensorSnapshot) {
@@ -139,5 +143,33 @@ class HeadingSensorAdapter(
         if (!registered) return
         sensorManager.unregisterListener(listener)
         registered = false
+    }
+
+    companion object {
+        /**
+         * Computes tilt-compensated forward azimuth from [rotationMatrix].
+         * When held upright (|pitch| > 45°), remaps the coordinate system so the
+         * camera's -Z viewing axis projects cleanly onto the horizontal world plane,
+         * preventing gimbal-lock flips up to 88°.
+         */
+        fun computeTiltCompensatedAzimuthDeg(
+            rotationMatrix: FloatArray,
+            remappedMatrix: FloatArray,
+            orientationOut: FloatArray,
+            pitchDeg: Float
+        ): Float {
+            if (abs(pitchDeg) > 45f) {
+                SensorManager.remapCoordinateSystem(
+                    rotationMatrix,
+                    SensorManager.AXIS_X,
+                    SensorManager.AXIS_Z,
+                    remappedMatrix
+                )
+                SensorManager.getOrientation(remappedMatrix, orientationOut)
+            }
+            return GeoMath.normalizeAngleDegrees(
+                Math.toDegrees(orientationOut[0].toDouble()).toFloat()
+            )
+        }
     }
 }

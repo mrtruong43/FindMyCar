@@ -85,6 +85,7 @@ class GuidanceEngine(
 
     private var latestAzimuthDeg: Float = 0f
     private var targetBearingDeg: Float = 0f
+    private var isTargetBearingLocked: Boolean = false
     private var lastBearingLat: Double? = null
     private var lastBearingLon: Double? = null
     private var distanceMeters: Float? = if (phase == GuidancePhase.PHASE2_FOOTPRINT) {
@@ -151,18 +152,23 @@ class GuidanceEngine(
 
         val dist = GeoMath.haversineDistanceMeters(lat, lon, tLat, tLon).toFloat()
 
-        // Freeze/hold target bearing when user has moved < 3m to prevent stationary GPS jitter
-        val prevLat = lastBearingLat
-        val prevLon = lastBearingLon
-        val movedMeters = if (prevLat != null && prevLon != null) {
-            GeoMath.haversineDistanceMeters(prevLat, prevLon, lat, lon)
-        } else {
-            Double.MAX_VALUE
-        }
-        if (movedMeters >= STATIONARY_BEARING_THRESHOLD_M) {
-            targetBearingDeg = GeoMath.initialBearingDegrees(lat, lon, tLat, tLon)
-            lastBearingLat = lat
-            lastBearingLon = lon
+        // Freeze/hold target bearing when user has moved < 3m or entered proximity dead-zone (<= 7m)
+        if (!isTargetBearingLocked) {
+            val prevLat = lastBearingLat
+            val prevLon = lastBearingLon
+            val movedMeters = if (prevLat != null && prevLon != null) {
+                GeoMath.haversineDistanceMeters(prevLat, prevLon, lat, lon)
+            } else {
+                Double.MAX_VALUE
+            }
+            if (movedMeters >= STATIONARY_BEARING_THRESHOLD_M) {
+                targetBearingDeg = GeoMath.initialBearingDegrees(lat, lon, tLat, tLon)
+                lastBearingLat = lat
+                lastBearingLon = lon
+            }
+            if (phase == GuidancePhase.PHASE1_GPS_TO_CAR && dist <= OUTDOOR_BEARING_LOCK_DISTANCE_M) {
+                isTargetBearingLocked = true
+            }
         }
 
         distanceMeters = dist
@@ -184,6 +190,7 @@ class GuidanceEngine(
     fun enterPhase2(currentPressureHpa: Float? = null): GuidanceState {
         if (!hasFootprint) return currentState()
         phase = GuidancePhase.PHASE2_FOOTPRINT
+        isTargetBearingLocked = false
         hasWeakGpsSignal = false
         currentX = reversedPolyline.first().x
         currentY = reversedPolyline.first().y
@@ -234,12 +241,17 @@ class GuidanceEngine(
     private fun recomputePhase2Guidance(isInitial: Boolean = false) {
         if (reversedPolyline.isEmpty()) return
         val proj = PathModel.projectOntoPolyline(currentX, currentY, reversedPolyline)
-        val lookahead = PathModel.lookaheadPoint(proj, reversedPolyline, LOOKAHEAD_METERS)
-        val dx = lookahead.x - currentX
-        val dy = lookahead.y - currentY
-        targetBearingDeg = GeoMath.normalizeAngleDegrees(
-            Math.toDegrees(atan2(dx.toDouble(), dy.toDouble())).toFloat()
-        )
+        if (!isTargetBearingLocked) {
+            val lookahead = PathModel.lookaheadPoint(proj, reversedPolyline, LOOKAHEAD_METERS)
+            val dx = lookahead.x - currentX
+            val dy = lookahead.y - currentY
+            targetBearingDeg = GeoMath.normalizeAngleDegrees(
+                Math.toDegrees(atan2(dx.toDouble(), dy.toDouble())).toFloat()
+            )
+            if (proj.remainingDistanceM <= PHASE2_BEARING_LOCK_DISTANCE_M) {
+                isTargetBearingLocked = true
+            }
+        }
         distanceMeters = proj.remainingDistanceM
         updateArrowFilter()
 
@@ -258,6 +270,8 @@ class GuidanceEngine(
     companion object {
         const val PHASE2_TRANSITION_DISTANCE_M = 15f
         const val VERY_CLOSE_DISTANCE_M = 8f
+        const val PHASE2_BEARING_LOCK_DISTANCE_M = 4.0f
+        const val OUTDOOR_BEARING_LOCK_DISTANCE_M = 7.0f
         const val OUTDOOR_VERY_CLOSE_DISTANCE_M = 10f
         const val OUTDOOR_VERY_CLOSE_MAX_ACCURACY_M = 25f
         const val OUTDOOR_ORIGIN_ACCURACY_M = 20f

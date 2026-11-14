@@ -13,7 +13,7 @@
   - Room `2.7.2`, DataStore Preferences `1.1.7`, Navigation Compose `2.9.0`, Google Play Services Location `21.3.0`.
   - **Lưu ý build CLI:** Cần trỏ `JAVA_HOME` tới JDK 17 (`C:\Users\Thu\AppData\Local\Programs\openjdk-17\jdk-17.0.19+10`).
 - **File APK hiện tại:** `findmycar-debug.apk` (`13,521,260` bytes / ~12.89 MB).
-- **Unit test:** 31/31 test pass trên JVM (không phụ thuộc thiết bị Android).
+- **Unit test:** 33/33 test pass trên JVM (không phụ thuộc thiết bị Android).
 
 ---
 

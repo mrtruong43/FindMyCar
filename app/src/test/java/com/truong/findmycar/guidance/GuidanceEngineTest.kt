@@ -245,4 +245,73 @@ class GuidanceEngineTest {
         val jittered = engine.onGpsUpdate(userLat, userLon + 0.000014, accuracyM = 8f)
         assertEquals(initialArrow, jittered.relativeArrowDeg, 0.5f)
     }
+
+    @Test
+    fun phase2LocksTargetBearingWithinFourMetersAndDoesNotFlipOnOvershoot() {
+        // Car at (0, 0), exit anchor at (0, 20) -> reversed path goes South (180°)
+        val engine = GuidanceEngine(
+            GuidanceTargetInfo(
+                carLat = null,
+                carLon = null,
+                anchorLat = null,
+                anchorLon = null,
+                anchorRelHeightM = null,
+                footprint = listOf(PathPoint(0f, 0f), PathPoint(0f, 20f))
+            )
+        )
+
+        // User faces South (180°) -> relative arrow ~0°
+        engine.onAzimuthUpdate(180f)
+
+        // Walk 17m South -> remainingDistanceM = 3.0m <= 4.0m -> enters VERY_CLOSE and locks bearing at 180°
+        repeat(17) {
+            engine.onStep(1.0f)
+        }
+        val lockedState = engine.currentState()
+        assertEquals(GuidancePhase.VERY_CLOSE, lockedState.phase)
+        assertEquals(0f, lockedState.relativeArrowDeg, 2f)
+
+        // Overshoot past (0, 0) by 2.5m to (0, -2.5) -> targetBearing must stay locked at 180° (NOT flip to 0° / 180° relative!)
+        repeat(5) {
+            engine.onStep(0.5f)
+        }
+        val overshootState = engine.currentState()
+        assertEquals(GuidancePhase.VERY_CLOSE, overshootState.phase)
+        assertEquals(0f, overshootState.relativeArrowDeg, 2f)
+
+        // Turning body to face East (90°) should still rotate relative arrow smoothly to +90°
+        repeat(15) {
+            engine.onAzimuthUpdate(90f)
+        }
+        assertEquals(90f, engine.currentState().relativeArrowDeg, 5f)
+    }
+
+    @Test
+    fun phase1OutdoorLocksTargetBearingWithinSevenMeters() {
+        val carLat = 10.777000
+        val carLon = 106.700900
+
+        val engine = GuidanceEngine(
+            GuidanceTargetInfo(
+                carLat = carLat,
+                carLon = carLon,
+                anchorLat = null,
+                anchorLon = null,
+                anchorRelHeightM = null,
+                footprint = emptyList(),
+                carAccuracyM = 6f,
+                environmentMode = ParkingEnvironmentMode.OUTDOOR
+            )
+        )
+
+        engine.onAzimuthUpdate(0f) // Facing North
+        // ~5m South of car -> bearing = 0° (North), locks bearing because dist <= 7.0m
+        val nearState = engine.onGpsUpdate(carLat - 0.000045, carLon, accuracyM = 6f)
+        assertEquals(GuidancePhase.VERY_CLOSE, nearState.phase)
+        assertEquals(0f, nearState.relativeArrowDeg, 2f)
+
+        // GPS jumps 5m North of car (overshoot past car) -> targetBearing must stay locked at 0°
+        val jumpedState = engine.onGpsUpdate(carLat + 0.000045, carLon, accuracyM = 6f)
+        assertEquals(0f, jumpedState.relativeArrowDeg, 2f)
+    }
 }
