@@ -259,6 +259,17 @@
     <string name="home_footprint_card_title">Dấu chân &amp; Lối ra</string>
     <string name="home_no_footprint_status">Chưa ghi dấu chân</string>
     <string name="home_start_footprint_button">Bắt đầu ghi dấu chân đi bộ</string>
+    <string name="home_saved_spot_title">Vị trí xe đã lưu</string>
+    <string name="home_parked_at_format">Đỗ lúc %1$s</string>
+    <string name="home_no_note_placeholder">Chưa có ghi chú tầng/cột</string>
+    <string name="home_note_photo_chip">Ghi chú &amp; ảnh</string>
+    <string name="home_recording_exit_title">Đang ghi dấu chân lối ra</string>
+    <string name="home_estimated_distance_format">~%1$dm</string>
+    <string name="home_skip_anchor_button">Bỏ qua lối ra</string>
+    <string name="home_anchored_footprint_summary">%1$d bước • ~%2$dm từ xe</string>
+    <string name="home_direct_gps_guidance">Dẫn đường trực tiếp tới xe</string>
+    <string name="home_start_exit_footprint_button">Bắt đầu ghi dấu chân lối ra</string>
+    <string name="home_edit_exit_anchor_button">Sửa lối ra / thang máy</string>
 
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>

@@ -66,6 +66,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -118,6 +119,9 @@ import com.truong.findmycar.util.GeoMath
 import com.truong.findmycar.util.Permissions
 import com.truong.findmycar.util.PhotoUtils
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -388,16 +392,20 @@ fun HomeScreen(
                             isTracking = uiState.isTracking,
                             trackingElapsedSeconds = uiState.trackingElapsedSeconds,
                             stepCount = uiState.stepCount,
-                            floorHeightM = uiState.floorHeightM,
+                            liveDistanceMeters = uiState.liveDistanceMeters,
+                            liveFloorDelta = uiState.liveFloorDelta,
+                            recordedStepCount = uiState.recordedStepCount,
+                            recordedDistanceMeters = uiState.recordedDistanceMeters,
                             onCardClick = { onOpenDetail(spot.id) },
                             onFindClick = { onOpenFind(spot.id) },
                             onMarkFoundClick = {
                                 if (uiState.isTracking) {
-                                    TrackingService.finalizeAnchor(context)
+                                    TrackingService.stop(context)
                                 }
                                 viewModel.markActiveSpotFound(spot.id)
                             },
                             onAnchorReachedClick = { TrackingService.finalizeAnchor(context) },
+                            onSkipAnchorClick = { TrackingService.stop(context) },
                             onEditAnchorClick = { showEditAnchorSheet = true },
                             onStartFootprintClick = {
                                 if (Permissions.hasForegroundLocation(context)) {
@@ -1236,11 +1244,15 @@ private fun ActiveHomeBentoLayout(
     isTracking: Boolean,
     trackingElapsedSeconds: Long,
     stepCount: Int,
-    floorHeightM: Float,
+    liveDistanceMeters: Float,
+    liveFloorDelta: Int,
+    recordedStepCount: Int,
+    recordedDistanceMeters: Float,
     onCardClick: () -> Unit,
     onFindClick: () -> Unit,
     onMarkFoundClick: () -> Unit,
     onAnchorReachedClick: () -> Unit,
+    onSkipAnchorClick: () -> Unit,
     onEditAnchorClick: () -> Unit,
     onStartFootprintClick: () -> Unit
 ) {
@@ -1260,263 +1272,390 @@ private fun ActiveHomeBentoLayout(
         }
     }
 
+    val parkedTimeStr = remember(spot.savedAt) {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(spot.savedAt))
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Middle Bento Area (Hero Card + Dedicated Footprint & Exit Anchor Card)
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Hero Bento Card
-            Surface(
-                onClick = onCardClick,
-                shape = RoundedCornerShape(24.dp),
-                color = BentoCardSurface,
-                border = BorderStroke(1.dp, BentoCardBorder),
-                modifier = Modifier.fillMaxWidth()
+        // Top Bento Card ("Thẻ Định Danh Xe")
+        CarIdentityBentoCard(
+            spot = spot,
+            parkedTimeStr = parkedTimeStr,
+            elapsedSubtitle = formatElapsedTime(context, spot.savedAt, nowMs),
+            photoBitmap = photoBitmap,
+            isCompactHeight = isCompactHeight,
+            onCardClick = onCardClick
+        )
+
+        if (isTracking) {
+            // STATE A — Recording Exit Path (car -> exit/elevator)
+            LiveTelemetryBentoCard(
+                stepCount = stepCount,
+                elapsedSeconds = trackingElapsedSeconds,
+                estimatedDistanceM = liveDistanceMeters,
+                floorDelta = liveFloorDelta,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            )
+
+            // Bottom Thumb Dock (Single Primary Action + Skip)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Column(
+                Button(
+                    onClick = onAnchorReachedClick,
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MintAccent,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .height(if (isCompactHeight) 56.dp else 64.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.home_your_car),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        EnvironmentBadgePill(spot = spot)
-                    }
-
                     Text(
-                        text = formatElapsedTime(context, spot.savedAt, nowMs),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = stringResource(R.string.tracking_anchor_button),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
+                }
 
-                    if (!isCompactHeight) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (stepCount > 0 || isTracking) {
-                                FloorBadge(label = stringResource(R.string.home_steps_count, stepCount))
-                            }
-                            spot.anchorRelHeightM?.let { relH ->
-                                val delta = GeoMath.estimateFloorDelta(-relH, floorHeightM)
-                                val floorText = when {
-                                    delta > 0 -> stringResource(R.string.home_floor_delta_up, delta)
-                                    delta < 0 -> stringResource(R.string.home_floor_delta_down, abs(delta))
-                                    else -> stringResource(R.string.home_floor_delta_same)
-                                }
-                                FloorBadge(label = floorText)
-                            }
-                        }
-                    }
-
-                    if (!isCompactHeight && (spot.note.isNotBlank() || photoBitmap != null)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            photoBitmap?.let { bmp ->
-                                Image(
-                                    bitmap = bmp.asImageBitmap(),
-                                    contentDescription = stringResource(R.string.detail_photo_cd),
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(56.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                )
-                            }
-                            if (spot.note.isNotBlank()) {
-                                Text(
-                                    text = spot.note,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = null,
-                            tint = MintAccent,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.home_detail_action),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MintAccent
-                        )
-                    }
+                TextButton(
+                    onClick = onSkipAnchorClick,
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_skip_anchor_button),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-
-            // Dedicated Footprint & Exit Anchor Card (always shown for both OUTDOOR & UNDERGROUND)
-            FootprintAndAnchorBentoCard(
-                isTracking = isTracking,
-                trackingElapsedSeconds = trackingElapsedSeconds,
-                stepCount = stepCount,
+        } else {
+            // STATE B — Parked & Ready to Find
+            ExitAnchorStatusBentoCard(
                 anchorSet = spot.anchorSet,
-                anchorRelHeightM = spot.anchorRelHeightM,
-                floorHeightM = floorHeightM,
-                onAnchorReachedClick = onAnchorReachedClick,
+                recordedStepCount = recordedStepCount,
+                recordedDistanceMeters = recordedDistanceMeters,
                 onEditAnchorClick = onEditAnchorClick,
-                onStartFootprintClick = onStartFootprintClick
+                onStartFootprintClick = onStartFootprintClick,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
             )
-        }
 
-        // Bottom Thumb Dock: Tìm xe (64.dp) + Đã lấy xe
-        val dockHeight = if (isCompactHeight) 56.dp else 64.dp
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = onMarkFoundClick,
-                shape = CircleShape,
-                border = BorderStroke(1.dp, BentoCardBorder),
-                modifier = Modifier
-                    .weight(0.38f)
-                    .height(dockHeight)
+            // Bottom Thumb Dock (Find & Complete Actions)
+            val dockHeight = if (isCompactHeight) 56.dp else 60.dp
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.home_mark_found),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+                OutlinedButton(
+                    onClick = onMarkFoundClick,
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, BentoCardBorder),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(dockHeight)
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_mark_found),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
-            Button(
-                onClick = onFindClick,
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MintAccent,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                modifier = Modifier
-                    .weight(0.62f)
-                    .height(dockHeight)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.LocationOn,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.home_find_car),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Button(
+                    onClick = onFindClick,
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MintAccent,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .height(dockHeight)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.home_find_car),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun FootprintAndAnchorBentoCard(
-    isTracking: Boolean,
-    trackingElapsedSeconds: Long,
-    stepCount: Int,
-    anchorSet: Boolean,
-    anchorRelHeightM: Float?,
-    floorHeightM: Float,
-    onAnchorReachedClick: () -> Unit,
-    onEditAnchorClick: () -> Unit,
-    onStartFootprintClick: () -> Unit
+private fun CarIdentityBentoCard(
+    spot: ParkingSpotEntity,
+    parkedTimeStr: String,
+    elapsedSubtitle: String,
+    photoBitmap: Bitmap?,
+    isCompactHeight: Boolean,
+    onCardClick: () -> Unit
 ) {
     Surface(
+        onClick = onCardClick,
         shape = RoundedCornerShape(24.dp),
         color = BentoCardSurface,
-        border = BorderStroke(
-            1.dp,
-            if (isTracking) MintAccent.copy(alpha = 0.45f) else BentoCardBorder
-        ),
+        border = BorderStroke(1.dp, BentoCardBorder),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Header Row: "Vị trí xe đã lưu" + Environment badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.home_footprint_card_title),
+                    text = stringResource(R.string.home_saved_spot_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                anchorRelHeightM?.let { relH ->
-                    val delta = GeoMath.estimateFloorDelta(-relH, floorHeightM)
-                    val floorText = when {
-                        delta > 0 -> stringResource(R.string.home_floor_delta_up, delta)
-                        delta < 0 -> stringResource(R.string.home_floor_delta_down, abs(delta))
-                        else -> stringResource(R.string.home_floor_delta_same)
-                    }
-                    FloorBadge(label = floorText)
-                }
+                EnvironmentBadgePill(spot = spot)
             }
 
-            if (isTracking) {
+            // Primary Metric: "Đỗ lúc 14:02 • 5 phút trước"
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
-                    text = stringResource(
-                        R.string.tracking_card_steps_elapsed,
-                        stepCount,
-                        TrackingService.formatDurationMmSs(trackingElapsedSeconds)
-                    ),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MintAccent
+                    text = stringResource(R.string.home_parked_at_format, parkedTimeStr),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                OutlinedButton(
-                    onClick = onAnchorReachedClick,
-                    shape = CircleShape,
-                    border = BorderStroke(1.dp, MintAccent),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
+                Text(
+                    text = "• $elapsedSubtitle",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Floor, Note & Photo Summary + "Ghi chú & ảnh" action chip
+            if (!isCompactHeight) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    photoBitmap?.let { bmp ->
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = stringResource(R.string.detail_photo_cd),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                    }
+
                     Text(
-                        text = stringResource(R.string.tracking_anchor_button),
-                        style = MaterialTheme.typography.labelLarge,
+                        text = spot.note.ifBlank {
+                            stringResource(R.string.home_no_note_placeholder)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (spot.note.isNotBlank()) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Surface(
+                        onClick = onCardClick,
+                        shape = CircleShape,
+                        color = MintAccent.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, MintAccent.copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = null,
+                                tint = MintAccent,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.home_note_photo_chip),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MintAccent
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveTelemetryBentoCard(
+    stepCount: Int,
+    elapsedSeconds: Long,
+    estimatedDistanceM: Float,
+    floorDelta: Int,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "dead_reckoning_pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
+
+    val floorText = when {
+        floorDelta > 0 -> stringResource(R.string.home_floor_delta_up, floorDelta)
+        floorDelta < 0 -> stringResource(R.string.home_floor_delta_down, abs(floorDelta))
+        else -> stringResource(R.string.home_floor_delta_same)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = BentoCardSurface,
+        border = BorderStroke(1.dp, MintAccent.copy(alpha = 0.45f)),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(MintAccent.copy(alpha = pulseAlpha))
+                    )
+                    Text(
+                        text = stringResource(R.string.home_recording_exit_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MintAccent
                     )
                 }
-            } else if (anchorSet) {
                 Text(
-                    text = stringResource(R.string.tracking_anchor_done),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MintAccent
+                    text = TrackingService.formatDurationMmSs(elapsedSeconds),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = stringResource(R.string.home_steps_count, stepCount),
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.home_estimated_distance_format,
+                            estimatedDistanceM.roundToInt()
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MintAccent
+                    )
+                }
+                FloorBadge(label = floorText)
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+        }
+    }
+}
+
+@Composable
+private fun ExitAnchorStatusBentoCard(
+    anchorSet: Boolean,
+    recordedStepCount: Int,
+    recordedDistanceMeters: Float,
+    onEditAnchorClick: () -> Unit,
+    onStartFootprintClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = BentoCardSurface,
+        border = BorderStroke(1.dp, BentoCardBorder),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            if (anchorSet) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.tracking_anchor_done),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MintAccent
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.home_anchored_footprint_summary,
+                            recordedStepCount,
+                            recordedDistanceMeters.roundToInt()
+                        ),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 OutlinedButton(
                     onClick = onEditAnchorClick,
                     shape = CircleShape,
@@ -1526,17 +1665,26 @@ private fun FootprintAndAnchorBentoCard(
                         .height(56.dp)
                 ) {
                     Text(
-                        text = stringResource(R.string.anchor_edit_button),
+                        text = stringResource(R.string.home_edit_exit_anchor_button),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             } else {
-                Text(
-                    text = stringResource(R.string.home_no_footprint_status),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.home_direct_gps_guidance),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.home_no_footprint_status),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 OutlinedButton(
                     onClick = onStartFootprintClick,
                     shape = CircleShape,
@@ -1546,7 +1694,7 @@ private fun FootprintAndAnchorBentoCard(
                         .height(56.dp)
                 ) {
                     Text(
-                        text = stringResource(R.string.home_start_footprint_button),
+                        text = stringResource(R.string.home_start_exit_footprint_button),
                         style = MaterialTheme.typography.labelLarge,
                         color = MintAccent
                     )

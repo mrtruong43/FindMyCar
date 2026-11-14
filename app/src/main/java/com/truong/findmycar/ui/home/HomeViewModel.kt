@@ -6,10 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.truong.findmycar.data.ParkingRepository
 import com.truong.findmycar.data.SettingsStore
 import com.truong.findmycar.data.db.ParkingSpotEntity
+import com.truong.findmycar.data.db.TrackPointEntity
 import com.truong.findmycar.detect.ParkingDetector
 import com.truong.findmycar.detect.ParkingEnvironmentMode
 import com.truong.findmycar.detect.SaveSpotResult
+import com.truong.findmycar.tracking.PathModel
+import com.truong.findmycar.tracking.PathPoint
 import com.truong.findmycar.tracking.TrackingStateHolder
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -17,6 +21,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -34,6 +40,10 @@ data class HomeUiState(
     val isTracking: Boolean = false,
     val trackingElapsedSeconds: Long = 0L,
     val stepCount: Int = 0,
+    val liveDistanceMeters: Float = 0f,
+    val liveFloorDelta: Int = 0,
+    val recordedStepCount: Int = 0,
+    val recordedDistanceMeters: Float = 0f,
     val autoDetectEnabled: Boolean = true,
     val barometerNoticeShown: Boolean = false,
     val floorHeightM: Float = 3.2f,
@@ -43,6 +53,7 @@ data class HomeUiState(
     val draftPhotoUri: String? = null
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val repository: ParkingRepository,
     private val parkingDetector: ParkingDetector,
@@ -53,8 +64,13 @@ class HomeViewModel(
     private val selectedEnvironmentModeFlow = MutableStateFlow(ParkingEnvironmentMode.AUTO)
     private val preSaveDraftFlow = MutableStateFlow(PreSaveDraft())
 
+    private val activeTrackPointsFlow = repository.activeSpot.flatMapLatest { spot ->
+        if (spot == null) flowOf(emptyList()) else repository.observeTrackPoints(spot.id)
+    }
+
     val uiState: StateFlow<HomeUiState> = combine(
         repository.activeSpot,
+        activeTrackPointsFlow,
         repository.historySpots.map { it.firstOrNull() },
         isSavingFlow,
         TrackingStateHolder.isTracking,
@@ -65,14 +81,26 @@ class HomeViewModel(
         preSaveDraftFlow
     ) { values ->
         val spot = values[0] as ParkingSpotEntity?
-        val latestHistory = values[1] as ParkingSpotEntity?
-        val isSaving = values[2] as Boolean
-        val isTracking = values[3] as Boolean
-        val elapsedSec = values[4] as Long
-        val telemetry = values[5] as com.truong.findmycar.tracking.TrackingTelemetry
-        val settings = values[6] as com.truong.findmycar.data.AppSettings
-        val selectedMode = values[7] as ParkingEnvironmentMode
-        val draft = values[8] as PreSaveDraft
+        @Suppress("UNCHECKED_CAST")
+        val trackPoints = values[1] as List<TrackPointEntity>
+        val latestHistory = values[2] as ParkingSpotEntity?
+        val isSaving = values[3] as Boolean
+        val isTracking = values[4] as Boolean
+        val elapsedSec = values[5] as Long
+        val telemetry = values[6] as com.truong.findmycar.tracking.TrackingTelemetry
+        val settings = values[7] as com.truong.findmycar.data.AppSettings
+        val selectedMode = values[8] as ParkingEnvironmentMode
+        val draft = values[9] as PreSaveDraft
+
+        val liveDist = telemetry.stepCount * settings.effectiveStepLengthM()
+        val storedDist = if (trackPoints.size >= 2) {
+            PathModel.totalLengthMeters(
+                trackPoints.map { PathPoint(x = it.x, y = it.y, relHeightM = it.relHeightM, tMs = it.t) }
+            )
+        } else {
+            trackPoints.size * settings.effectiveStepLengthM()
+        }
+
         HomeUiState(
             activeSpot = spot,
             latestHistorySpot = latestHistory,
@@ -80,6 +108,10 @@ class HomeViewModel(
             isTracking = isTracking,
             trackingElapsedSeconds = elapsedSec,
             stepCount = telemetry.stepCount,
+            liveDistanceMeters = liveDist,
+            liveFloorDelta = telemetry.floorDelta,
+            recordedStepCount = maxOf(trackPoints.size, if (isTracking) telemetry.stepCount else 0),
+            recordedDistanceMeters = maxOf(storedDist, if (isTracking) liveDist else 0f),
             autoDetectEnabled = settings.autoDetectEnabled,
             barometerNoticeShown = settings.barometerNoticeShown,
             floorHeightM = settings.floorHeightM,
