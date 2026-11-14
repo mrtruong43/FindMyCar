@@ -1,0 +1,28 @@
+# Gradle & Build outputs
+.gradle/
+build/
+**/build/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local environment & signing
+local.properties
+*.jks
+*.keystore
+
+# Built APKs / AABs
+*.apk
+*.ap_
+*.aab
+
+# OS & Logs
+.DS_Store
+Thumbs.db
+*.log
+hs_err_pid*

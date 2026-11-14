@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Đỗ xe</string>
+
+    <!-- Home Screen -->
+    <string name="home_save_car">Lưu xe</string>
+    <string name="home_saving_car">Đang lưu…</string>
+    <string name="home_find_car">Tìm xe</string>
+    <string name="home_your_car">Xe của bạn</string>
+    <string name="home_empty_hint">Chạm để lưu vị trí xe</string>
+    <string name="home_history_cd">Lịch sử</string>
+    <string name="home_settings_cd">Cài đặt</string>
+    <string name="home_detail_action">Ghi chú &amp; ảnh</string>
+    <string name="home_no_gps">Chưa có GPS</string>
+    <string name="home_gps_saved">Đã lưu GPS</string>
+    <string name="home_pressure_saved">Cùng tầng</string>
+    <string name="home_spot_saved_toast">Đã lưu vị trí xe</string>
+    <string name="home_spot_saved_no_gps_toast">Đã lưu xe (không có tín hiệu GPS)</string>
+
+    <!-- Home Tracking Card (M2) -->
+    <string name="tracking_card_title">Đang ghi đường đi</string>
+    <string name="tracking_card_elapsed">Thời gian ghi: %s</string>
+    <string name="tracking_anchor_button">Tôi đã tới lối ra/thang máy</string>
+    <string name="tracking_anchor_done">Đã chốt lối ra/thang máy</string>
+    <string name="tracking_anchor_pending">Chưa chốt lối ra</string>
+    <string name="tracking_start_test">Bắt đầu ghi đường đi</string>
+    <string name="tracking_need_location_toast">Cần quyền vị trí để ghi đường đi chạy nền</string>
+
+    <!-- Foreground Service Notification -->
+    <string name="tracking_notif_channel_name">Ghi đường đi từ xe</string>
+    <string name="tracking_notif_channel_desc">Hiển thị khi ứng dụng đang ghi lại đường đi bộ ra khỏi xe</string>
+    <string name="tracking_notif_title">Đang ghi đường đi từ xe</string>
+    <string name="tracking_notif_text">Đã ghi %s • Chạm để mở</string>
+    <string name="tracking_notif_stop">Dừng ghi</string>
+
+    <!-- Elapsed Time -->
+    <string name="time_just_now">Vừa xong</string>
+    <string name="time_minutes_ago">%d phút trước</string>
+    <string name="time_hours_ago">%d giờ trước</string>
+    <string name="time_hours_minutes_ago">%1$d giờ %2$d phút trước</string>
+    <string name="time_days_ago">%d ngày trước</string>
+
+    <!-- Spot Detail Screen -->
+    <string name="detail_title">Chi tiết vị trí</string>
+    <string name="detail_back_cd">Quay lại</string>
+    <string name="detail_note_label">Ghi chú</string>
+    <string name="detail_note_placeholder">Ví dụ: Cột B4, gần thang máy…</string>
+    <string name="detail_voice_input">Nói để ghi chú</string>
+    <string name="detail_voice_prompt">Nói ghi chú vị trí xe của bạn</string>
+    <string name="detail_voice_unavailable">Thiết bị chưa hỗ trợ nhập giọng nói</string>
+    <string name="detail_take_photo">Chụp ảnh</string>
+    <string name="detail_retake_photo">Chụp lại</string>
+    <string name="detail_photo_cd">Ảnh vị trí đỗ xe</string>
+    <string name="detail_open_map">Mở trên bản đồ</string>
+    <string name="detail_no_map_coords">Chưa có tọa độ GPS để mở bản đồ</string>
+    <string name="detail_no_map_app">Không tìm thấy ứng dụng bản đồ</string>
+    <string name="detail_save_note">Lưu ghi chú</string>
+    <string name="detail_note_saved">Đã lưu ghi chú</string>
+    <string name="detail_coords_format">GPS: %1$.5f, %2$.5f</string>
+    <string name="detail_accuracy_format">Sai số khoảng %d m</string>
+    <string name="detail_pressure_format">Áp suất: %1$.1f hPa</string>
+    <string name="detail_no_barometer">Máy không có khí áp kế</string>
+    <string name="detail_camera_error">Không thể mở máy ảnh</string>
+
+    <!-- Onboarding (M2) -->
+    <string name="onboarding_skip">Bỏ qua</string>
+    <string name="onboarding_next">Tiếp tục</string>
+    <string name="onboarding_finish">Bắt đầu dùng</string>
+
+    <string name="onboarding_step1_title">Tìm lại xe dễ dàng ngay cả dưới hầm</string>
+    <string name="onboarding_step1_body">Khi bạn đỗ xe ở hầm không có GPS hay mạng, ứng dụng vẫn ghi nhớ tầng đỗ, lối ra và dẫn đường bạn quay lại đúng chỗ.</string>
+    <string name="onboarding_step1_point1">Tự lưu vị trí khi bạn rời xe hoặc bấm Lưu xe</string>
+    <string name="onboarding_step1_point2">Hoạt động hoàn toàn trên máy, không cần tài khoản</string>
+
+    <string name="onboarding_step2_title">Cấp quyền để tự động ghi nhớ</string>
+    <string name="onboarding_step2_body">Bạn có thể bỏ qua bước này và vẫn dùng chế độ Lưu xe thủ công.</string>
+
+    <string name="perm_fg_location_title">Vị trí khi dùng ứng dụng</string>
+    <string name="perm_fg_location_desc">Lưu tọa độ ngoài trời và lối ra hầm.</string>
+    <string name="perm_bg_location_title">Vị trí luôn cho phép</string>
+    <string name="perm_bg_location_desc">Giúp ghi nhận vị trí trước khi xuống hầm, ngay cả khi tắt màn hình.</string>
+    <string name="perm_activity_title">Nhận diện di chuyển</string>
+    <string name="perm_activity_desc">Phát hiện lúc bạn xuống xe và đếm bước chân.</string>
+    <string name="perm_notif_title">Thông báo</string>
+    <string name="perm_notif_desc">Hiện trạng thái đang ghi đường đi và nhắc thêm ghi chú.</string>
+    <string name="perm_grant_action">Cấp quyền</string>
+    <string name="perm_granted">Đã cấp</string>
+    <string name="perm_need_fg_first">Cần cấp vị trí trước</string>
+    <string name="perm_open_settings">Mở cài đặt quyền</string>
+
+    <string name="onboarding_step3_title">Giữ ứng dụng chạy ổn định trên Samsung</string>
+    <string name="onboarding_step3_body">One UI có thể tự tắt ứng dụng khi chạy nền để tiết kiệm pin. Hãy cho phép ứng dụng không bị giới hạn pin.</string>
+
+    <!-- Battery Optimization Card -->
+    <string name="battery_card_title">Tối ưu pin Samsung</string>
+    <string name="battery_status_ok">Đã tắt tối ưu pin — chạy nền ổn định</string>
+    <string name="battery_status_need">Đang bị giới hạn pin — có thể bị tắt khi khóa màn hình</string>
+    <string name="battery_action_button">Cho phép chạy nền không giới hạn</string>
+    <string name="battery_oneui_steps">Trên Samsung One UI, bạn cũng nên kiểm tra:\nCài đặt &gt; Pin &gt; Giới hạn sử dụng dưới nền &gt; Ứng dụng không bao giờ ngủ &gt; Thêm FindMyCar.</string>
+
+    <!-- Settings Screen (M2) -->
+    <string name="settings_title">Cài đặt</string>
+    <string name="settings_section_general">Chung</string>
+    <string name="settings_auto_detect">Tự phát hiện lúc đỗ xe</string>
+    <string name="settings_auto_detect_desc">Tự lưu vị trí khi dừng lái và bắt đầu đi bộ</string>
+    <string name="settings_haptic">Rung phản hồi</string>
+    <string name="settings_haptic_desc">Rung nhẹ khi đúng hướng hoặc tới gần xe</string>
+    <string name="settings_section_measure">Đo đạc</string>
+    <string name="settings_user_height">Chiều cao của bạn: %.2f m</string>
+    <string name="settings_floor_height">Độ cao mỗi tầng: %.1f m</string>
+    <string name="settings_section_permissions">Quyền và pin</string>
+    <string name="settings_reopen_onboarding">Xem lại hướng dẫn &amp; cấp quyền</string>
+
+    <!-- Placeholders for M5 / M6 -->
+    <string name="placeholder_find_title">Tìm xe</string>
+    <string name="placeholder_history_title">Lịch sử đỗ xe</string>
+    <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>
+</resources>
