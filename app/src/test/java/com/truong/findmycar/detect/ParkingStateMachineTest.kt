@@ -37,4 +37,16 @@ class ParkingStateMachineTest {
         assertFalse(sm.canSaveParkingSpot(t0 + 89_999L))
         assertTrue(sm.canSaveParkingSpot(t0 + 90_000L))
     }
+
+    @Test
+    fun resetCooldownAllowsImmediateAutoOrManualResaveAfterFound() {
+        val sm = ParkingStateMachine()
+        val t0 = 1_000_000L
+
+        sm.recordSpotSaved(t0)
+        assertFalse(sm.canSaveParkingSpot(t0 + 5_000L))
+
+        sm.resetCooldown()
+        assertTrue(sm.canSaveParkingSpot(t0 + 5_000L))
+    }
 }

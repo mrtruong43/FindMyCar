@@ -52,8 +52,7 @@ data class GuidanceState(
 class GuidanceEngine(
     private val info: GuidanceTargetInfo
 ) {
-    private val azimuthFilter = CircularFilter(alpha = 0.30f)
-    private val arrowFilter = CircularFilter(alpha = 0.35f)
+    private val arrowFilter = CircularFilter(alpha = 0.45f)
 
     private val hasFootprint = info.footprint.size >= 2
     private val reversedPolyline: List<PathPoint> =
@@ -86,6 +85,8 @@ class GuidanceEngine(
 
     private var latestAzimuthDeg: Float = 0f
     private var targetBearingDeg: Float = 0f
+    private var lastBearingLat: Double? = null
+    private var lastBearingLon: Double? = null
     private var distanceMeters: Float? = if (phase == GuidancePhase.PHASE2_FOOTPRINT) {
         totalPolylineLengthM
     } else {
@@ -133,7 +134,7 @@ class GuidanceEngine(
     }
 
     fun onAzimuthUpdate(azimuthDeg: Float): GuidanceState {
-        latestAzimuthDeg = azimuthFilter.update(azimuthDeg)
+        latestAzimuthDeg = GeoMath.normalizeAngleDegrees(azimuthDeg)
         updateArrowFilter()
         return currentState()
     }
@@ -149,7 +150,21 @@ class GuidanceEngine(
         val tLon = targetGpsLon ?: return currentState()
 
         val dist = GeoMath.haversineDistanceMeters(lat, lon, tLat, tLon).toFloat()
-        targetBearingDeg = GeoMath.initialBearingDegrees(lat, lon, tLat, tLon)
+
+        // Freeze/hold target bearing when user has moved < 3m to prevent stationary GPS jitter
+        val prevLat = lastBearingLat
+        val prevLon = lastBearingLon
+        val movedMeters = if (prevLat != null && prevLon != null) {
+            GeoMath.haversineDistanceMeters(prevLat, prevLon, lat, lon)
+        } else {
+            Double.MAX_VALUE
+        }
+        if (movedMeters >= STATIONARY_BEARING_THRESHOLD_M) {
+            targetBearingDeg = GeoMath.initialBearingDegrees(lat, lon, tLat, tLon)
+            lastBearingLat = lat
+            lastBearingLon = lon
+        }
+
         distanceMeters = dist
         updateArrowFilter()
 
@@ -248,6 +263,7 @@ class GuidanceEngine(
         const val OUTDOOR_ORIGIN_ACCURACY_M = 20f
         const val OUTDOOR_MAX_REL_HEIGHT_M = 2.0f
         const val MIN_INITIAL_POLYLINE_FOR_VERY_CLOSE_GUARD_M = 15f
+        const val STATIONARY_BEARING_THRESHOLD_M = 3.0
         const val LOOKAHEAD_METERS = 6.5f
         const val WEAK_GPS_ACCURACY_M = 35f
 

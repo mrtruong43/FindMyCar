@@ -398,7 +398,14 @@ fun HomeScreen(
                                 viewModel.markActiveSpotFound(spot.id)
                             },
                             onAnchorReachedClick = { TrackingService.finalizeAnchor(context) },
-                            onEditAnchorClick = { showEditAnchorSheet = true }
+                            onEditAnchorClick = { showEditAnchorSheet = true },
+                            onStartFootprintClick = {
+                                if (Permissions.hasForegroundLocation(context)) {
+                                    TrackingService.start(context, spot.id)
+                                } else {
+                                    permissionLauncher.launch(Permissions.FOREGROUND_LOCATION_PERMISSIONS)
+                                }
+                            }
                         )
                     }
                 }
@@ -1234,7 +1241,8 @@ private fun ActiveHomeBentoLayout(
     onFindClick: () -> Unit,
     onMarkFoundClick: () -> Unit,
     onAnchorReachedClick: () -> Unit,
-    onEditAnchorClick: () -> Unit
+    onEditAnchorClick: () -> Unit,
+    onStartFootprintClick: () -> Unit
 ) {
     val context = LocalContext.current
     var nowMs by remember(spot.id) { mutableLongStateOf(System.currentTimeMillis()) }
@@ -1256,23 +1264,28 @@ private fun ActiveHomeBentoLayout(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Hero Bento Card (Modifier.weight(1f))
-        Surface(
-            onClick = onCardClick,
-            shape = RoundedCornerShape(24.dp),
-            color = BentoCardSurface,
-            border = BorderStroke(1.dp, BentoCardBorder),
+        // Middle Bento Area (Hero Card + Dedicated Footprint & Exit Anchor Card)
+        Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+            // Hero Bento Card
+            Surface(
+                onClick = onCardClick,
+                shape = RoundedCornerShape(24.dp),
+                color = BentoCardSurface,
+                border = BorderStroke(1.dp, BentoCardBorder),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1313,76 +1326,33 @@ private fun ActiveHomeBentoLayout(
                             }
                         }
                     }
-                }
 
-                if (!isCompactHeight && (spot.note.isNotBlank() || photoBitmap != null)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        photoBitmap?.let { bmp ->
-                            Image(
-                                bitmap = bmp.asImageBitmap(),
-                                contentDescription = stringResource(R.string.detail_photo_cd),
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                            )
-                        }
-                        if (spot.note.isNotBlank()) {
-                            Text(
-                                text = spot.note,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (isTracking) {
-                        Text(
-                            text = stringResource(
-                                R.string.tracking_card_steps_elapsed,
-                                stepCount,
-                                TrackingService.formatDurationMmSs(trackingElapsedSeconds)
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MintAccent
-                        )
-                        OutlinedButton(
-                            onClick = onAnchorReachedClick,
-                            shape = CircleShape,
-                            border = BorderStroke(1.dp, MintAccent),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
+                    if (!isCompactHeight && (spot.note.isNotBlank() || photoBitmap != null)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text(
-                                text = stringResource(R.string.tracking_anchor_button),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MintAccent
-                            )
-                        }
-                    } else if (spot.anchorSet && !isCompactHeight) {
-                        OutlinedButton(
-                            onClick = onEditAnchorClick,
-                            shape = CircleShape,
-                            border = BorderStroke(1.dp, BentoCardBorder),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.anchor_edit_button),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            photoBitmap?.let { bmp ->
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = stringResource(R.string.detail_photo_cd),
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                )
+                            }
+                            if (spot.note.isNotBlank()) {
+                                Text(
+                                    text = spot.note,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
 
@@ -1404,6 +1374,19 @@ private fun ActiveHomeBentoLayout(
                     }
                 }
             }
+
+            // Dedicated Footprint & Exit Anchor Card (always shown for both OUTDOOR & UNDERGROUND)
+            FootprintAndAnchorBentoCard(
+                isTracking = isTracking,
+                trackingElapsedSeconds = trackingElapsedSeconds,
+                stepCount = stepCount,
+                anchorSet = spot.anchorSet,
+                anchorRelHeightM = spot.anchorRelHeightM,
+                floorHeightM = floorHeightM,
+                onAnchorReachedClick = onAnchorReachedClick,
+                onEditAnchorClick = onEditAnchorClick,
+                onStartFootprintClick = onStartFootprintClick
+            )
         }
 
         // Bottom Thumb Dock: Tìm xe (64.dp) + Đã lấy xe
@@ -1451,6 +1434,123 @@ private fun ActiveHomeBentoLayout(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FootprintAndAnchorBentoCard(
+    isTracking: Boolean,
+    trackingElapsedSeconds: Long,
+    stepCount: Int,
+    anchorSet: Boolean,
+    anchorRelHeightM: Float?,
+    floorHeightM: Float,
+    onAnchorReachedClick: () -> Unit,
+    onEditAnchorClick: () -> Unit,
+    onStartFootprintClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = BentoCardSurface,
+        border = BorderStroke(
+            1.dp,
+            if (isTracking) MintAccent.copy(alpha = 0.45f) else BentoCardBorder
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.home_footprint_card_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                anchorRelHeightM?.let { relH ->
+                    val delta = GeoMath.estimateFloorDelta(-relH, floorHeightM)
+                    val floorText = when {
+                        delta > 0 -> stringResource(R.string.home_floor_delta_up, delta)
+                        delta < 0 -> stringResource(R.string.home_floor_delta_down, abs(delta))
+                        else -> stringResource(R.string.home_floor_delta_same)
+                    }
+                    FloorBadge(label = floorText)
+                }
+            }
+
+            if (isTracking) {
+                Text(
+                    text = stringResource(
+                        R.string.tracking_card_steps_elapsed,
+                        stepCount,
+                        TrackingService.formatDurationMmSs(trackingElapsedSeconds)
+                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MintAccent
+                )
+                OutlinedButton(
+                    onClick = onAnchorReachedClick,
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, MintAccent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.tracking_anchor_button),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MintAccent
+                    )
+                }
+            } else if (anchorSet) {
+                Text(
+                    text = stringResource(R.string.tracking_anchor_done),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MintAccent
+                )
+                OutlinedButton(
+                    onClick = onEditAnchorClick,
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, BentoCardBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.anchor_edit_button),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.home_no_footprint_status),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(
+                    onClick = onStartFootprintClick,
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, MintAccent.copy(alpha = 0.55f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_start_footprint_button),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MintAccent
+                    )
+                }
             }
         }
     }

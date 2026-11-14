@@ -6,6 +6,7 @@ import com.truong.findmycar.data.SettingsStore
 import com.truong.findmycar.data.db.AppDatabase
 import com.truong.findmycar.detect.ActivityTransitionManager
 import com.truong.findmycar.detect.ParkingDetector
+import com.truong.findmycar.detect.ParkingStateMachine
 import com.truong.findmycar.util.Permissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,11 +16,14 @@ import kotlinx.coroutines.launch
 
 class AppContainer(application: Application) {
     val database: AppDatabase by lazy { AppDatabase.getInstance(application) }
+    val parkingStateMachine: ParkingStateMachine by lazy { ParkingStateMachine() }
     val repository: ParkingRepository by lazy {
-        ParkingRepository(database.parkingSpotDao(), database.trackPointDao())
+        ParkingRepository(database.parkingSpotDao(), database.trackPointDao(), parkingStateMachine)
     }
     val settingsStore: SettingsStore by lazy { SettingsStore(application) }
-    val parkingDetector: ParkingDetector by lazy { ParkingDetector(application, repository) }
+    val parkingDetector: ParkingDetector by lazy {
+        ParkingDetector(application, repository, parkingStateMachine)
+    }
 }
 
 class FindMyCarApp : Application() {

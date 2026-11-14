@@ -3,7 +3,8 @@ package com.truong.findmycar.detect
 /**
  * Pure Kotlin state machine for automatic parking detection timing and deduplication rules.
  * - Triggers auto-parking when WALKING ENTER occurs within 2 minutes of IN_VEHICLE EXIT.
- * - Deduplicates any parking save (auto or manual) within 90 seconds of the last saved spot.
+ * - Deduplicates automatic parking saves within 90 seconds of the last saved spot.
+ * - Manual user saves bypass deduplication; marking FOUND or deleting resets cooldown.
  */
 class ParkingStateMachine(
     private val exitToWalkWindowMs: Long = DEFAULT_EXIT_TO_WALK_WINDOW_MS,
@@ -44,6 +45,13 @@ class ParkingStateMachine(
     fun recordSpotSaved(nowMs: Long) {
         synchronized(lock) {
             lastSavedSpotMs = nowMs
+        }
+    }
+
+    fun resetCooldown() {
+        synchronized(lock) {
+            lastSavedSpotMs = null
+            lastVehicleExitMs = null
         }
     }
 

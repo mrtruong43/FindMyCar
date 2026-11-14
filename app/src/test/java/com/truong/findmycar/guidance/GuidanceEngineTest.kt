@@ -215,4 +215,34 @@ class GuidanceEngineTest {
         )
         assertEquals(GuidancePhase.PHASE1_GPS_TO_CAR, engine.currentState().phase)
     }
+
+    @Test
+    fun stationaryGpsJitterBelowThreeMetersHoldsTargetBearing() {
+        // Car is 100m North of user
+        val carLat = 10.7779
+        val carLon = 106.7009
+        val userLat = 10.7770
+        val userLon = 106.7009
+
+        val engine = GuidanceEngine(
+            GuidanceTargetInfo(
+                carLat = carLat,
+                carLon = carLon,
+                anchorLat = null,
+                anchorLon = null,
+                anchorRelHeightM = null,
+                footprint = emptyList(),
+                carAccuracyM = 8f,
+                environmentMode = ParkingEnvironmentMode.OUTDOOR
+            )
+        )
+
+        engine.onAzimuthUpdate(0f) // User facing North
+        val initial = engine.onGpsUpdate(userLat, userLon, accuracyM = 8f)
+        val initialArrow = initial.relativeArrowDeg
+
+        // Jitter < 3m (~1.5m East) -> bearing must remain frozen
+        val jittered = engine.onGpsUpdate(userLat, userLon + 0.000014, accuracyM = 8f)
+        assertEquals(initialArrow, jittered.relativeArrowDeg, 0.5f)
+    }
 }

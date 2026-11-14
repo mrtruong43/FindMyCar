@@ -6,11 +6,13 @@ import com.truong.findmycar.data.db.SpotSource
 import com.truong.findmycar.data.db.SpotStatus
 import com.truong.findmycar.data.db.TrackPointDao
 import com.truong.findmycar.data.db.TrackPointEntity
+import com.truong.findmycar.detect.ParkingStateMachine
 import kotlinx.coroutines.flow.Flow
 
 class ParkingRepository(
     private val parkingSpotDao: ParkingSpotDao,
-    private val trackPointDao: TrackPointDao
+    private val trackPointDao: TrackPointDao,
+    private val stateMachine: ParkingStateMachine = ParkingStateMachine()
 ) {
     val activeSpot: Flow<ParkingSpotEntity?> = parkingSpotDao.observeActiveSpot()
 
@@ -64,6 +66,7 @@ class ParkingRepository(
 
     suspend fun markAsFound(spotId: Long) {
         parkingSpotDao.updateStatus(spotId, SpotStatus.FOUND)
+        stateMachine.resetCooldown()
     }
 
     suspend fun markAnchorSet(spotId: Long) {
@@ -104,9 +107,11 @@ class ParkingRepository(
 
     suspend fun deleteSpot(spotId: Long) {
         parkingSpotDao.deleteById(spotId)
+        stateMachine.resetCooldown()
     }
 
     suspend fun deleteAllData() {
         parkingSpotDao.deleteAll()
+        stateMachine.resetCooldown()
     }
 }

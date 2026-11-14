@@ -54,7 +54,8 @@ data class SaveSpotResult(
 
 class ParkingDetector(
     private val context: Context,
-    private val repository: ParkingRepository
+    private val repository: ParkingRepository,
+    private val stateMachine: ParkingStateMachine = ParkingStateMachine()
 ) {
     private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -62,7 +63,6 @@ class ParkingDetector(
     private val saveMutex = Mutex()
 
     val recentLocationBuffer = RecentLocationBuffer()
-    private val stateMachine = ParkingStateMachine()
 
     private var drivingCallback: LocationCallback? = null
     private var drivingTimeoutJob: Job? = null
@@ -73,15 +73,6 @@ class ParkingDetector(
         photoUri: String? = null
     ): SaveSpotResult = saveMutex.withLock {
         val nowMs = System.currentTimeMillis()
-        if (!stateMachine.canSaveParkingSpot(nowMs)) {
-            return@withLock SaveSpotResult(
-                spotId = -1L,
-                hasLocation = false,
-                hasPressure = false,
-                skippedDuplicate = true
-            )
-        }
-
         stateMachine.recordSpotSaved(nowMs)
         executeParkingSave(
             source = SpotSource.MANUAL,

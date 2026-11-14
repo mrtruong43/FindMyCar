@@ -256,6 +256,9 @@
     <string name="home_quick_note_placeholder">Ghi chú cột/khu vực (VD: Cột A4)...</string>
     <string name="home_quick_camera_cd">Chụp ảnh vị trí đỗ xe</string>
     <string name="home_quick_remove_photo_cd">Xóa ảnh đã chụp</string>
+    <string name="home_footprint_card_title">Dấu chân &amp; Lối ra</string>
+    <string name="home_no_footprint_status">Chưa ghi dấu chân</string>
+    <string name="home_start_footprint_button">Bắt đầu ghi dấu chân đi bộ</string>
 
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>

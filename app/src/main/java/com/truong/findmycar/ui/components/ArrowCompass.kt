@@ -1,13 +1,12 @@
 package com.truong.findmycar.ui.components
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -48,21 +47,21 @@ fun ArrowCompass(
     isLowAccuracy: Boolean,
     modifier: Modifier = Modifier
 ) {
-    // Track continuous unwrapped angle so Compose spring always rotates via shortest arc.
-    var continuousTargetAngle by remember { mutableFloatStateOf(relativeArrowDeg) }
+    // Track continuous unwrapped angle so Compose animation always rotates via shortest arc.
+    var cumulativeAngleDeg by remember { mutableFloatStateOf(relativeArrowDeg) }
     LaunchedEffect(relativeArrowDeg) {
         val delta = GeoMath.shortestAngleDeltaDegrees(
-            GeoMath.normalizeAngleDegrees(continuousTargetAngle),
+            GeoMath.normalizeAngleDegrees(cumulativeAngleDeg),
             GeoMath.normalizeAngleDegrees(relativeArrowDeg)
         )
-        continuousTargetAngle += delta
+        cumulativeAngleDeg += delta
     }
 
     val animatedAngle by animateFloatAsState(
-        targetValue = continuousTargetAngle,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+        targetValue = cumulativeAngleDeg,
+        animationSpec = tween(
+            durationMillis = 120,
+            easing = LinearOutSlowInEasing
         ),
         label = "arrow_rotation"
     )
