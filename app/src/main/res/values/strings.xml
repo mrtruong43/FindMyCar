@@ -225,6 +225,28 @@
     <string name="home_mode_underground">Trong hầm</string>
     <string name="home_mode_outdoor">Ngoài trời</string>
 
+    <!-- Home Bento Redesign -->
+    <string name="home_gps_card_title">Tín hiệu GPS</string>
+    <string name="home_gps_lost">Mất sóng</string>
+    <string name="home_gps_outdoor_ready">Ngoài trời sẵn sàng</string>
+    <string name="home_gps_underground_ready">Chế độ hầm</string>
+    <string name="home_sensor_card_title">Cảm biến &amp; Tự động</string>
+    <string name="home_barometer_hpa">%1$.0f hPa</string>
+    <string name="home_barometer_na">Không có áp kế</string>
+    <string name="home_auto_detect_on">Tự động phát hiện: BẬT</string>
+    <string name="home_auto_detect_off">Tự động phát hiện: TẮT</string>
+    <string name="home_recent_spot_title">Lần đỗ gần nhất</string>
+    <string name="home_quick_readiness_title">Sẵn sàng ghi nhớ vị trí</string>
+    <string name="home_quick_step_1">1. Tự động chọn GPS ngoài trời hoặc quét bước trong hầm</string>
+    <string name="home_quick_step_2">2. Ghi chú nhanh tầng đỗ, cột trụ hoặc chụp ảnh</string>
+    <string name="home_quick_step_3">3. Dẫn đường 2 pha chính xác về tận vị trí xe</string>
+    <string name="home_save_car_cta">Lưu vị trí xe</string>
+    <string name="home_mark_found">Đã lấy xe</string>
+    <string name="home_steps_count">%1$d bước</string>
+    <string name="home_floor_delta_same">Cùng tầng</string>
+    <string name="home_floor_delta_up">+%1$d tầng</string>
+    <string name="home_floor_delta_down">-%1$d tầng</string>
+
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>
 </resources>

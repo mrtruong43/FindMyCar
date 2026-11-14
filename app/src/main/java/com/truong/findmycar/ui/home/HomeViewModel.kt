@@ -17,17 +17,20 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val activeSpot: ParkingSpotEntity? = null,
+    val latestHistorySpot: ParkingSpotEntity? = null,
     val isSaving: Boolean = false,
     val isTracking: Boolean = false,
     val trackingElapsedSeconds: Long = 0L,
     val stepCount: Int = 0,
     val autoDetectEnabled: Boolean = true,
     val barometerNoticeShown: Boolean = false,
+    val floorHeightM: Float = 3.2f,
     val selectedEnvironmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO
 )
 
@@ -42,6 +45,7 @@ class HomeViewModel(
 
     val uiState: StateFlow<HomeUiState> = combine(
         repository.activeSpot,
+        repository.historySpots.map { it.firstOrNull() },
         isSavingFlow,
         TrackingStateHolder.isTracking,
         TrackingStateHolder.elapsedSeconds,
@@ -50,20 +54,23 @@ class HomeViewModel(
         selectedEnvironmentModeFlow
     ) { values ->
         val spot = values[0] as ParkingSpotEntity?
-        val isSaving = values[1] as Boolean
-        val isTracking = values[2] as Boolean
-        val elapsedSec = values[3] as Long
-        val telemetry = values[4] as com.truong.findmycar.tracking.TrackingTelemetry
-        val settings = values[5] as com.truong.findmycar.data.AppSettings
-        val selectedMode = values[6] as ParkingEnvironmentMode
+        val latestHistory = values[1] as ParkingSpotEntity?
+        val isSaving = values[2] as Boolean
+        val isTracking = values[3] as Boolean
+        val elapsedSec = values[4] as Long
+        val telemetry = values[5] as com.truong.findmycar.tracking.TrackingTelemetry
+        val settings = values[6] as com.truong.findmycar.data.AppSettings
+        val selectedMode = values[7] as ParkingEnvironmentMode
         HomeUiState(
             activeSpot = spot,
+            latestHistorySpot = latestHistory,
             isSaving = isSaving,
             isTracking = isTracking,
             trackingElapsedSeconds = elapsedSec,
             stepCount = telemetry.stepCount,
             autoDetectEnabled = settings.autoDetectEnabled,
             barometerNoticeShown = settings.barometerNoticeShown,
+            floorHeightM = settings.floorHeightM,
             selectedEnvironmentMode = selectedMode
         )
     }.stateIn(
@@ -117,6 +124,12 @@ class HomeViewModel(
         viewModelScope.launch {
             repository.clearAnchor(spotId)
             _anchorActionMessageRes.tryEmit(com.truong.findmycar.R.string.anchor_cleared_toast)
+        }
+    }
+
+    fun markActiveSpotFound(spotId: Long) {
+        viewModelScope.launch {
+            repository.markAsFound(spotId)
         }
     }
 

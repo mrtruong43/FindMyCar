@@ -29,13 +29,17 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.truong.findmycar.ui.theme.MintAccent
 import com.truong.findmycar.ui.theme.OutlineSubtle
-import com.truong.findmycar.ui.theme.TextPrimary
+import com.truong.findmycar.ui.theme.TextSecondary
 import com.truong.findmycar.ui.theme.WarningAmber
 import com.truong.findmycar.util.GeoMath
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
 fun ArrowCompass(
@@ -88,8 +92,9 @@ fun ArrowCompass(
                 null
             }
 
-            // Concentric rings
-            val ringRadii = listOf(maxRadius * 0.92f, maxRadius * 0.66f, maxRadius * 0.40f)
+            // Concentric radar rings scaled proportionally
+            val outerRadius = maxRadius * 0.88f
+            val ringRadii = listOf(outerRadius, maxRadius * 0.64f, maxRadius * 0.40f)
             ringRadii.forEachIndexed { idx, radius ->
                 val isOuter = idx == 0
                 val ringColor = when {
@@ -106,6 +111,43 @@ fun ArrowCompass(
                         pathEffect = dashEffect
                     )
                 )
+            }
+
+            // Subtle degree ticks around outer ring
+            for (deg in 0 until 360 step 15) {
+                val isMajor = deg % 90 == 0
+                val rad = Math.toRadians(deg.toDouble() - 90.0)
+                val innerR = outerRadius - (if (isMajor) 7.dp.toPx() else 3.5.dp.toPx())
+                drawLine(
+                    color = if (isMajor) TextSecondary.copy(alpha = 0.65f) else OutlineSubtle.copy(alpha = 0.55f),
+                    start = Offset(
+                        center.x + (innerR * cos(rad)).toFloat(),
+                        center.y + (innerR * sin(rad)).toFloat()
+                    ),
+                    end = Offset(
+                        center.x + (outerRadius * cos(rad)).toFloat(),
+                        center.y + (outerRadius * sin(rad)).toFloat()
+                    ),
+                    strokeWidth = if (isMajor) 1.6.dp.toPx() else 1.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            }
+
+            // Cardinal labels (N / E / S / W)
+            val labelPaint = android.graphics.Paint().apply {
+                isAntiAlias = true
+                textAlign = android.graphics.Paint.Align.CENTER
+                textSize = 11.sp.toPx()
+                color = android.graphics.Color.argb(175, 154, 165, 177)
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+            val labelRadius = maxRadius * 0.96f
+            val cardinals = listOf(0 to "N", 90 to "E", 180 to "S", 270 to "W")
+            cardinals.forEach { (deg, text) ->
+                val rad = Math.toRadians(deg.toDouble() - 90.0)
+                val lx = center.x + (labelRadius * cos(rad)).toFloat()
+                val ly = center.y + (labelRadius * sin(rad)).toFloat() + 4.dp.toPx()
+                drawContext.canvas.nativeCanvas.drawText(text, lx, ly, labelPaint)
             }
 
             if (isVeryClose) {
@@ -142,8 +184,8 @@ fun ArrowCompass(
                     )
                 }
             } else {
-                // Thin-stroke precision directional arrow (pointing up at 0°)
-                val arrowColor = if (isAligned) MintAccent else TextPrimary
+                // Smooth spring-animated #2EE6A6 directional arrow (pointing up at 0°)
+                val arrowColor = if (isAligned) MintAccent else MintAccent.copy(alpha = 0.88f)
                 rotate(degrees = animatedAngle, pivot = center) {
                     val tipY = center.y - maxRadius * 0.62f
                     val tailY = center.y + maxRadius * 0.44f

@@ -12,6 +12,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,7 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -55,6 +56,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -70,6 +75,9 @@ import com.truong.findmycar.R
 import com.truong.findmycar.guidance.GuidancePhase
 import com.truong.findmycar.ui.components.ArrowCompass
 import com.truong.findmycar.ui.components.FloorBadge
+import com.truong.findmycar.ui.theme.BentoCardBorder
+import com.truong.findmycar.ui.theme.BentoCardSurface
+import com.truong.findmycar.ui.theme.MintAccent
 import com.truong.findmycar.util.GeoMath
 import com.truong.findmycar.util.PhotoUtils
 import kotlin.math.abs
@@ -112,34 +120,55 @@ fun FindCarScreen(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .drawBehind {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MintAccent.copy(alpha = 0.10f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width / 2f, size.height * 0.88f),
+                            radius = size.width * 0.85f
+                        ),
+                        radius = size.width * 0.85f,
+                        center = Offset(size.width / 2f, size.height * 0.88f)
+                    )
+                }
                 .padding(innerPadding)
-                .statusBarsPadding()
-                .navigationBarsPadding()
         ) {
-            val compassSize = minOf(maxWidth * 0.70f, maxHeight * 0.42f).coerceIn(180.dp, 280.dp)
+            val isCompactHeight = maxHeight < 450.dp
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .systemBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Top Bar: Close (X) on corner + centered FloorBadge pill
+                // 1. Top Header (wrapContentHeight)
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    IconButton(
+                    Surface(
                         onClick = onClose,
+                        shape = CircleShape,
+                        color = BentoCardSurface,
+                        border = BorderStroke(1.dp, BentoCardBorder),
                         modifier = Modifier
                             .align(Alignment.CenterStart)
-                            .size(56.dp)
+                            .size(48.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Close,
-                            contentDescription = stringResource(R.string.find_close_cd),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = stringResource(R.string.find_close_cd),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
 
                     guidance.floorDeltaToTarget?.let { delta ->
@@ -152,185 +181,221 @@ fun FindCarScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.weight(0.6f))
-
-                if (guidance.phase == GuidancePhase.NO_SIGNAL_FALLBACK) {
-                    Surface(
-                        shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                // 2. Flexible Compass Middle Zone (Modifier.weight(1f))
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (guidance.phase == GuidancePhase.NO_SIGNAL_FALLBACK) {
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = BentoCardSurface,
+                            border = BorderStroke(1.dp, BentoCardBorder),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = stringResource(R.string.find_no_signal_title),
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = stringResource(R.string.find_no_signal_desc),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                } else {
-                    val distIntForA11y = guidance.distanceMeters?.roundToInt() ?: 0
-                    val dirForA11y = when {
-                        guidance.phase == GuidancePhase.VERY_CLOSE -> stringResource(R.string.find_status_very_close)
-                        abs(guidance.relativeArrowDeg) < 15f -> stringResource(R.string.find_status_straight)
-                        guidance.relativeArrowDeg in 15f..150f -> stringResource(R.string.find_status_right)
-                        guidance.relativeArrowDeg in -150f..-15f -> stringResource(R.string.find_status_left)
-                        else -> stringResource(R.string.find_status_turn_around)
-                    }
-                    val floorForA11y = guidance.floorDeltaToTarget?.let { delta ->
-                        when {
-                            delta > 0 -> stringResource(R.string.find_floor_up, delta)
-                            delta < 0 -> stringResource(R.string.find_floor_down, abs(delta))
-                            else -> stringResource(R.string.find_floor_same)
-                        }
-                    }
-                    val compassA11y = if (floorForA11y != null) {
-                        stringResource(R.string.a11y_compass_with_floor, distIntForA11y, dirForA11y, floorForA11y)
-                    } else {
-                        stringResource(R.string.a11y_compass_summary, distIntForA11y, dirForA11y)
-                    }
-
-                    ArrowCompass(
-                        relativeArrowDeg = guidance.relativeArrowDeg,
-                        isVeryClose = guidance.phase == GuidancePhase.VERY_CLOSE,
-                        isLowAccuracy = guidance.isCompassLowAccuracy,
-                        modifier = Modifier
-                            .size(compassSize)
-                            .semantics { contentDescription = compassA11y }
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Distance readout with rolling digit animation
-                    val distInt = guidance.distanceMeters?.roundToInt()
-                    if (guidance.phase == GuidancePhase.VERY_CLOSE) {
-                        Text(
-                            text = stringResource(R.string.find_status_very_close),
-                            fontSize = 44.sp,
-                            fontWeight = FontWeight.Light,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    } else if (distInt != null) {
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            AnimatedContent(
-                                targetState = distInt,
-                                transitionSpec = {
-                                    (slideInVertically { it / 2 } + fadeIn()) togetherWith
-                                        (slideOutVertically { -it / 2 } + fadeOut())
-                                },
-                                label = "rolling_distance"
-                            ) { value ->
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
                                 Text(
-                                    text = value.toString(),
-                                    fontSize = 64.sp,
-                                    fontWeight = FontWeight.Thin,
-                                    color = MaterialTheme.colorScheme.onBackground
+                                    text = stringResource(R.string.find_no_signal_title),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = stringResource(R.string.find_no_signal_desc),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
                                 )
                             }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "m",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Light,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
                         }
-                    }
+                    } else {
+                        val compassSize = minOf(maxWidth * 0.84f, maxHeight * 0.90f)
+                            .coerceIn(140.dp, 310.dp)
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                        val distIntForA11y = guidance.distanceMeters?.roundToInt() ?: 0
+                        val dirForA11y = when {
+                            guidance.phase == GuidancePhase.VERY_CLOSE -> stringResource(R.string.find_status_very_close)
+                            abs(guidance.relativeArrowDeg) < 15f -> stringResource(R.string.find_status_straight)
+                            guidance.relativeArrowDeg in 15f..150f -> stringResource(R.string.find_status_right)
+                            guidance.relativeArrowDeg in -150f..-15f -> stringResource(R.string.find_status_left)
+                            else -> stringResource(R.string.find_status_turn_around)
+                        }
+                        val floorForA11y = guidance.floorDeltaToTarget?.let { delta ->
+                            when {
+                                delta > 0 -> stringResource(R.string.find_floor_up, delta)
+                                delta < 0 -> stringResource(R.string.find_floor_down, abs(delta))
+                                else -> stringResource(R.string.find_floor_same)
+                            }
+                        }
+                        val compassA11y = if (floorForA11y != null) {
+                            stringResource(R.string.a11y_compass_with_floor, distIntForA11y, dirForA11y, floorForA11y)
+                        } else {
+                            stringResource(R.string.a11y_compass_summary, distIntForA11y, dirForA11y)
+                        }
 
-                    val statusText = when {
-                        guidance.isCompassLowAccuracy -> stringResource(R.string.find_status_calibrate)
-                        guidance.hasWeakGpsSignal -> stringResource(R.string.find_status_weak_signal)
-                        guidance.phase == GuidancePhase.VERY_CLOSE -> ""
-                        abs(guidance.relativeArrowDeg) < 15f -> stringResource(R.string.find_status_straight)
-                        guidance.relativeArrowDeg in 15f..150f -> stringResource(R.string.find_status_right)
-                        guidance.relativeArrowDeg in -150f..-15f -> stringResource(R.string.find_status_left)
-                        else -> stringResource(R.string.find_status_turn_around)
-                    }
-                    if (statusText.isNotEmpty()) {
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ArrowCompass(
+                            relativeArrowDeg = guidance.relativeArrowDeg,
+                            isVeryClose = guidance.phase == GuidancePhase.VERY_CLOSE,
+                            isLowAccuracy = guidance.isCompassLowAccuracy,
+                            modifier = Modifier
+                                .size(compassSize)
+                                .semantics { contentDescription = compassA11y }
                         )
-                    }
-
-                    if (guidance.canEnterPhase2Manually) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedButton(
-                            onClick = { viewModel.enterPhase2Manually() },
-                            shape = CircleShape,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                            modifier = Modifier.height(56.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.find_at_anchor_button),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Bottom thumb-zone frosted-glass pill buttons
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                // 3. Unified Frosted-Glass Bottom Dock Card (28.dp top corners)
+                Surface(
+                    shape = RoundedCornerShape(
+                        topStart = 28.dp,
+                        topEnd = 28.dp,
+                        bottomStart = 24.dp,
+                        bottomEnd = 24.dp
+                    ),
+                    color = BentoCardSurface,
+                    border = BorderStroke(1.dp, BentoCardBorder),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Surface(
-                        onClick = { showNoteSheet = true },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = if (isCompactHeight) 14.dp else 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(R.string.find_notes_photos_button),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+                        if (guidance.phase != GuidancePhase.NO_SIGNAL_FALLBACK) {
+                            val distInt = guidance.distanceMeters?.roundToInt()
+                            val statusText = when {
+                                guidance.isCompassLowAccuracy -> stringResource(R.string.find_status_calibrate)
+                                guidance.hasWeakGpsSignal -> stringResource(R.string.find_status_weak_signal)
+                                guidance.phase == GuidancePhase.VERY_CLOSE -> stringResource(R.string.find_status_very_close)
+                                abs(guidance.relativeArrowDeg) < 15f -> stringResource(R.string.find_status_straight)
+                                guidance.relativeArrowDeg in 15f..150f -> stringResource(R.string.find_status_right)
+                                guidance.relativeArrowDeg in -150f..-15f -> stringResource(R.string.find_status_left)
+                                else -> stringResource(R.string.find_status_turn_around)
+                            }
 
-                    Button(
-                        onClick = { viewModel.markCarFound(onClose) },
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.find_found_button),
-                            style = MaterialTheme.typography.labelLarge
-                        )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (guidance.phase == GuidancePhase.VERY_CLOSE) {
+                                    Text(
+                                        text = stringResource(R.string.find_status_very_close),
+                                        fontSize = 32.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MintAccent
+                                    )
+                                } else if (distInt != null) {
+                                    Row(
+                                        verticalAlignment = Alignment.Bottom,
+                                        horizontalArrangement = Arrangement.Start
+                                    ) {
+                                        AnimatedContent(
+                                            targetState = distInt,
+                                            transitionSpec = {
+                                                (slideInVertically { it / 2 } + fadeIn()) togetherWith
+                                                    (slideOutVertically { -it / 2 } + fadeOut())
+                                            },
+                                            label = "rolling_distance"
+                                        ) { value ->
+                                            Text(
+                                                text = value.toString(),
+                                                fontSize = if (isCompactHeight) 40.sp else 52.sp,
+                                                fontWeight = FontWeight.Light,
+                                                color = MaterialTheme.colorScheme.onBackground
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "m",
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.Light,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                    }
+                                }
+
+                                if (guidance.phase != GuidancePhase.VERY_CLOSE ||
+                                    guidance.isCompassLowAccuracy ||
+                                    guidance.hasWeakGpsSignal
+                                ) {
+                                    Text(
+                                        text = statusText,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (guidance.isCompassLowAccuracy || guidance.hasWeakGpsSignal) {
+                                            com.truong.findmycar.ui.theme.WarningAmber
+                                        } else {
+                                            MintAccent
+                                        }
+                                    )
+                                }
+                            }
+
+                            if (guidance.canEnterPhase2Manually && !isCompactHeight) {
+                                OutlinedButton(
+                                    onClick = { viewModel.enterPhase2Manually() },
+                                    shape = CircleShape,
+                                    border = BorderStroke(1.dp, MintAccent.copy(alpha = 0.5f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.find_at_anchor_button),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MintAccent
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { showNoteSheet = true },
+                                shape = CircleShape,
+                                border = BorderStroke(1.dp, BentoCardBorder),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.find_notes_photos_button),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.markCarFound(onClose) },
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MintAccent,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(56.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.find_found_button),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
