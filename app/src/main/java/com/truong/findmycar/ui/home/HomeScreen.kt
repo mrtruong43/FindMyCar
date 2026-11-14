@@ -91,6 +91,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -245,13 +246,15 @@ fun HomeScreen(
         viewModel.saveManualSpot()
     }
 
-    var pendingDraftPhotoUri by remember { mutableStateOf<Uri?>(null) }
-    val takeDraftPhotoLauncher = rememberLauncherForActivityResult(
+    var pendingActivePhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingActivePhotoSpotId by remember { mutableStateOf<Long?>(null) }
+    val takeActivePhotoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        val uri = pendingDraftPhotoUri
-        if (success && uri != null) {
-            viewModel.setDraftPhotoUri(uri.toString())
+        val uri = pendingActivePhotoUri
+        val spotId = pendingActivePhotoSpotId
+        if (success && uri != null && spotId != null) {
+            viewModel.updateActiveSpotPhoto(spotId, uri.toString())
         }
     }
 
@@ -372,21 +375,7 @@ fun HomeScreen(
                             autoDetectEnabled = uiState.autoDetectEnabled,
                             selectedEnvironmentMode = uiState.selectedEnvironmentMode,
                             vehicleType = uiState.vehicleType,
-                            draftFloorTag = uiState.draftFloorTag,
-                            draftNote = uiState.draftNote,
-                            draftPhotoUri = uiState.draftPhotoUri,
                             onEnvironmentModeSelected = onModeSelected,
-                            onFloorTagToggle = viewModel::toggleDraftFloorTag,
-                            onDraftNoteChanged = viewModel::onDraftNoteChanged,
-                            onTakePhotoClick = {
-                                try {
-                                    val uri = PhotoUtils.createPhotoUri(context)
-                                    pendingDraftPhotoUri = uri
-                                    takeDraftPhotoLauncher.launch(uri)
-                                } catch (_: Exception) {
-                                }
-                            },
-                            onRemovePhotoClick = { viewModel.setDraftPhotoUri(null) },
                             onSaveClick = onRequestSave
                         )
                     } else {
@@ -418,7 +407,19 @@ fun HomeScreen(
                                 } else {
                                     permissionLauncher.launch(Permissions.FOREGROUND_LOCATION_PERMISSIONS)
                                 }
-                            }
+                            },
+                            onFloorTagToggle = { tag -> viewModel.updateActiveSpotFloorTag(spot, tag) },
+                            onNoteBodyChanged = { body -> viewModel.updateActiveSpotNoteBody(spot, body) },
+                            onTakePhotoClick = {
+                                try {
+                                    val uri = PhotoUtils.createPhotoUri(context)
+                                    pendingActivePhotoUri = uri
+                                    pendingActivePhotoSpotId = spot.id
+                                    takeActivePhotoLauncher.launch(uri)
+                                } catch (_: Exception) {
+                                }
+                            },
+                            onRemovePhotoClick = { viewModel.updateActiveSpotPhoto(spot.id, null) }
                         )
                     }
                 }
@@ -584,14 +585,7 @@ private fun EmptyHomeBentoLayout(
     autoDetectEnabled: Boolean,
     selectedEnvironmentMode: ParkingEnvironmentMode,
     vehicleType: VehicleHologramType,
-    draftFloorTag: String?,
-    draftNote: String,
-    draftPhotoUri: String?,
     onEnvironmentModeSelected: (ParkingEnvironmentMode) -> Unit,
-    onFloorTagToggle: (String) -> Unit,
-    onDraftNoteChanged: (String) -> Unit,
-    onTakePhotoClick: () -> Unit,
-    onRemovePhotoClick: () -> Unit,
     onSaveClick: () -> Unit
 ) {
     val isStrongGps = liveGpsAccuracyM != null && liveGpsAccuracyM <= 20f
@@ -672,39 +666,11 @@ private fun EmptyHomeBentoLayout(
                     )
                 }
 
-                // Stage 1: Compact 2.5D Hologram Stage (~130.dp) above quick floor/note controls
-                val stageTint = when (selectedEnvironmentMode) {
-                    ParkingEnvironmentMode.AUTO -> if (isStrongGps) MintAccent else WarningAmber
-                    ParkingEnvironmentMode.UNDERGROUND -> WarningAmber
-                    ParkingEnvironmentMode.OUTDOOR -> MintAccent
-                }
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = BentoCardSurface,
-                    border = BorderStroke(1.dp, BentoCardBorder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(130.dp)
-                ) {
-                    ScooterHologramStage(
-                        mode = HologramStageMode.READY_TO_PARK,
-                        vehicleType = vehicleType,
-                        tintColor = stageTint,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                // Bento Card 2: Non-clickable Pre-Save Quick Context Card
-                PreSaveQuickContextBentoCard(
+                // Hero 3D Hologram Stage Bento Card filling the entire weight(1f) middle canvas
+                HeroHologramBentoCard(
                     selectedMode = selectedEnvironmentMode,
                     gpsAccuracyM = liveGpsAccuracyM,
-                    selectedFloorTag = draftFloorTag,
-                    noteText = draftNote,
-                    photoUri = draftPhotoUri,
-                    onFloorTagToggle = onFloorTagToggle,
-                    onNoteChanged = onDraftNoteChanged,
-                    onTakePhotoClick = onTakePhotoClick,
-                    onRemovePhotoClick = onRemovePhotoClick,
+                    vehicleType = vehicleType,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -869,26 +835,12 @@ private fun SensorsBentoCard(
 }
 
 @Composable
-private fun PreSaveQuickContextBentoCard(
+private fun HeroHologramBentoCard(
     selectedMode: ParkingEnvironmentMode,
     gpsAccuracyM: Float?,
-    selectedFloorTag: String?,
-    noteText: String,
-    photoUri: String?,
-    onFloorTagToggle: (String) -> Unit,
-    onNoteChanged: (String) -> Unit,
-    onTakePhotoClick: () -> Unit,
-    onRemovePhotoClick: () -> Unit,
+    vehicleType: VehicleHologramType,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    var photoBitmap by remember(photoUri) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(photoUri) {
-        photoBitmap = photoUri?.let { uri ->
-            PhotoUtils.loadSampledBitmap(context, uri, maxDimensionPx = 256)
-        }
-    }
-
     val isStrongGps = gpsAccuracyM != null && gpsAccuracyM <= 20f
     val (bannerColor, bannerText) = when (selectedMode) {
         ParkingEnvironmentMode.AUTO -> {
@@ -909,9 +861,6 @@ private fun PreSaveQuickContextBentoCard(
         }
     }
 
-    val floorChips = listOf("B3", "B2", "B1", "Trệt", "Tầng 2")
-    val basementChips = setOf("B3", "B2", "B1")
-
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = BentoCardSurface,
@@ -921,19 +870,33 @@ private fun PreSaveQuickContextBentoCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .drawBehind {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                bannerColor.copy(alpha = 0.11f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width / 2f, size.height * 0.62f),
+                            radius = size.minDimension * 0.65f
+                        ),
+                        center = Offset(size.width / 2f, size.height * 0.62f),
+                        radius = size.minDimension * 0.65f
+                    )
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 1. Dynamic Mode Preview Banner
+            // Top compact status pill reflecting active 3-mode selector + live GPS accuracy
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = CircleShape,
                 color = bannerColor.copy(alpha = 0.12f),
                 border = BorderStroke(1.dp, bannerColor.copy(alpha = 0.35f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -947,152 +910,30 @@ private fun PreSaveQuickContextBentoCard(
                         text = bannerText,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
-                        color = bannerColor
+                        color = bannerColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            // 2. 1-Tap Floor Selector Chips
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = stringResource(R.string.home_quick_floor_label),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    floorChips.forEach { tag ->
-                        val isSelected = selectedFloorTag == tag
-                        val highlightBasement =
-                            selectedMode == ParkingEnvironmentMode.UNDERGROUND &&
-                                tag in basementChips &&
-                                !isSelected
-                        val chipBg = when {
-                            isSelected -> MintAccent
-                            highlightBasement -> WarningAmber.copy(alpha = 0.14f)
-                            else -> MaterialTheme.colorScheme.surfaceContainerHigh
-                        }
-                        val chipBorder = when {
-                            isSelected -> MintAccent
-                            highlightBasement -> WarningAmber.copy(alpha = 0.55f)
-                            else -> BentoCardBorder
-                        }
-                        val chipTextColor = when {
-                            isSelected -> MaterialTheme.colorScheme.onPrimary
-                            highlightBasement -> WarningAmber
-                            else -> MaterialTheme.colorScheme.onSurface
-                        }
+            // Large, prominent 3D Isometric Hologram centered in the card
+            ScooterHologramStage(
+                mode = HologramStageMode.READY_TO_PARK,
+                vehicleType = vehicleType,
+                tintColor = bannerColor,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            )
 
-                        Surface(
-                            onClick = { onFloorTagToggle(tag) },
-                            shape = CircleShape,
-                            color = chipBg,
-                            border = BorderStroke(1.dp, chipBorder),
-                            modifier = Modifier.heightIn(min = 38.dp)
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = tag,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (isSelected || highlightBasement) {
-                                        FontWeight.SemiBold
-                                    } else {
-                                        FontWeight.Normal
-                                    },
-                                    color = chipTextColor
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. Inline Pillar Note + 48.dp Camera Button
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedTextField(
-                    value = noteText,
-                    onValueChange = onNoteChanged,
-                    placeholder = {
-                        Text(
-                            text = stringResource(R.string.home_quick_note_placeholder),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MintAccent,
-                        unfocusedBorderColor = BentoCardBorder,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.35f)
-                    ),
-                    modifier = Modifier.weight(1f)
-                )
-
-                val cameraCd = stringResource(R.string.home_quick_camera_cd)
-                Surface(
-                    onClick = onTakePhotoClick,
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = BorderStroke(1.dp, BentoCardBorder),
-                    modifier = Modifier
-                        .size(48.dp)
-                        .semantics { contentDescription = cameraCd }
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        CameraThinIcon(tint = MintAccent)
-                    }
-                }
-            }
-
-            // Compact removable photo thumbnail once captured
-            photoBitmap?.let { bmp ->
-                Box(
-                    modifier = Modifier.size(60.dp)
-                ) {
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = stringResource(R.string.detail_photo_cd),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(12.dp))
-                    )
-                    Surface(
-                        onClick = onRemovePhotoClick,
-                        shape = CircleShape,
-                        color = Color.Black.copy(alpha = 0.72f),
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(2.dp)
-                            .size(20.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Outlined.Close,
-                                contentDescription = stringResource(R.string.home_quick_remove_photo_cd),
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                    }
-                }
-            }
+            // Subtle bottom caption
+            Text(
+                text = stringResource(R.string.hologram_drag_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -1283,7 +1124,11 @@ private fun ActiveHomeBentoLayout(
     onAnchorReachedClick: () -> Unit,
     onSkipAnchorClick: () -> Unit,
     onEditAnchorClick: () -> Unit,
-    onStartFootprintClick: () -> Unit
+    onStartFootprintClick: () -> Unit,
+    onFloorTagToggle: (String) -> Unit,
+    onNoteBodyChanged: (String) -> Unit,
+    onTakePhotoClick: () -> Unit,
+    onRemovePhotoClick: () -> Unit
 ) {
     val context = LocalContext.current
     var nowMs by remember(spot.id) { mutableLongStateOf(System.currentTimeMillis()) }
@@ -1309,7 +1154,7 @@ private fun ActiveHomeBentoLayout(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Top Bento Card ("Thẻ Định Danh Xe") with Stage 2 Hologram
+        // Top Bento Card ("Thẻ Định Danh Xe") with Stage 2 Hologram + Quick Floor/Note/Camera
         CarIdentityBentoCard(
             spot = spot,
             parkedTimeStr = parkedTimeStr,
@@ -1319,7 +1164,11 @@ private fun ActiveHomeBentoLayout(
             vehicleType = vehicleType,
             isTracking = isTracking,
             stepCount = stepCount,
-            onCardClick = onCardClick
+            onCardClick = onCardClick,
+            onFloorTagToggle = onFloorTagToggle,
+            onNoteBodyChanged = onNoteBodyChanged,
+            onTakePhotoClick = onTakePhotoClick,
+            onRemovePhotoClick = onRemovePhotoClick
         )
 
         if (isTracking) {
@@ -1443,11 +1292,26 @@ private fun CarIdentityBentoCard(
     vehicleType: VehicleHologramType,
     isTracking: Boolean,
     stepCount: Int,
-    onCardClick: () -> Unit
+    onCardClick: () -> Unit,
+    onFloorTagToggle: (String) -> Unit,
+    onNoteBodyChanged: (String) -> Unit,
+    onTakePhotoClick: () -> Unit,
+    onRemovePhotoClick: () -> Unit
 ) {
     val envMode = ParkingEnvironmentResolver.fromStorageName(spot.environmentMode)
     val isUnderground = envMode == ParkingEnvironmentMode.UNDERGROUND || spot.lat == null
     val stageTint = if (isUnderground) WarningAmber else MintAccent
+    val (selectedFloorTag, parsedNoteBody) = remember(spot.note) {
+        HomeViewModel.splitFloorAndNote(spot.note)
+    }
+    var noteInput by remember(spot.id) { mutableStateOf(parsedNoteBody) }
+    LaunchedEffect(parsedNoteBody) {
+        if (parsedNoteBody != noteInput) {
+            noteInput = parsedNoteBody
+        }
+    }
+    val floorChips = HomeViewModel.QUICK_FLOOR_TAGS
+    val basementChips = setOf("B3", "B2", "B1")
 
     Surface(
         onClick = onCardClick,
@@ -1497,7 +1361,7 @@ private fun CarIdentityBentoCard(
                 )
             }
 
-            // Stage 2: 2.5D Hologram Lock-down Stage (tap to spin 360°)
+            // Stage 2: 2.5D Hologram Lock-down Stage (tap or swipe to rotate 360°)
             if (!isCompactHeight) {
                 ScooterHologramStage(
                     mode = HologramStageMode.PARKED_LOCKED,
@@ -1507,65 +1371,139 @@ private fun CarIdentityBentoCard(
                     isTracking = isTracking,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(116.dp)
+                        .height(112.dp)
                 )
             }
 
-            // Floor, Note & Photo Summary + "Ghi chú & ảnh" action chip
+            // Quick Floor Chips, Inline Pillar Note & 1-Tap Camera (auto-saved to Room)
             if (!isCompactHeight) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    floorChips.forEach { tag ->
+                        val isSelected = selectedFloorTag == tag
+                        val highlightBasement = isUnderground && tag in basementChips && !isSelected
+                        val chipBg = when {
+                            isSelected -> MintAccent
+                            highlightBasement -> WarningAmber.copy(alpha = 0.14f)
+                            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+                        }
+                        val chipBorder = when {
+                            isSelected -> MintAccent
+                            highlightBasement -> WarningAmber.copy(alpha = 0.55f)
+                            else -> BentoCardBorder
+                        }
+                        val chipTextColor = when {
+                            isSelected -> MaterialTheme.colorScheme.onPrimary
+                            highlightBasement -> WarningAmber
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+
+                        Surface(
+                            onClick = { onFloorTagToggle(tag) },
+                            shape = CircleShape,
+                            color = chipBg,
+                            border = BorderStroke(1.dp, chipBorder),
+                            modifier = Modifier.heightIn(min = 36.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = tag,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (isSelected || highlightBasement) {
+                                        FontWeight.SemiBold
+                                    } else {
+                                        FontWeight.Normal
+                                    },
+                                    color = chipTextColor
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    photoBitmap?.let { bmp ->
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = stringResource(R.string.detail_photo_cd),
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                        )
-                    }
-
-                    Text(
-                        text = spot.note.ifBlank {
-                            stringResource(R.string.home_no_note_placeholder)
+                    OutlinedTextField(
+                        value = noteInput,
+                        onValueChange = { updated ->
+                            noteInput = updated
+                            onNoteBodyChanged(updated)
                         },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (spot.note.isNotBlank()) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                        placeholder = {
+                            Text(
+                                text = stringResource(R.string.home_quick_note_placeholder),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         },
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MintAccent,
+                            unfocusedBorderColor = BentoCardBorder,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.35f)
+                        ),
                         modifier = Modifier.weight(1f)
                     )
 
-                    Surface(
-                        onClick = onCardClick,
-                        shape = CircleShape,
-                        color = MintAccent.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, MintAccent.copy(alpha = 0.35f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    if (photoBitmap != null) {
+                        Box(modifier = Modifier.size(48.dp)) {
+                            Image(
+                                bitmap = photoBitmap.asImageBitmap(),
+                                contentDescription = stringResource(R.string.detail_photo_cd),
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(onClick = onCardClick)
+                            )
+                            Surface(
+                                onClick = onRemovePhotoClick,
+                                shape = CircleShape,
+                                color = Color.Black.copy(alpha = 0.72f),
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(2.dp)
+                                    .size(18.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = stringResource(R.string.home_quick_remove_photo_cd),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        val cameraCd = stringResource(R.string.home_quick_camera_cd)
+                        Surface(
+                            onClick = onTakePhotoClick,
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, BentoCardBorder),
+                            modifier = Modifier
+                                .size(48.dp)
+                                .semantics { contentDescription = cameraCd }
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Edit,
-                                contentDescription = null,
-                                tint = MintAccent,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = stringResource(R.string.home_note_photo_chip),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MintAccent
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                CameraThinIcon(tint = MintAccent)
+                            }
                         }
                     }
                 }

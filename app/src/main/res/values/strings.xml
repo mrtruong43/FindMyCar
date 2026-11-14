@@ -278,6 +278,7 @@
     <string name="settings_vehicle_car">Ô tô</string>
     <string name="hologram_stage_ready_cd">Mô hình xe 2.5D sẵn sàng lưu vị trí</string>
     <string name="hologram_stage_locked_cd">Mô hình xe 2.5D đã khóa vị trí, chạm để xoay 360 độ</string>
+    <string name="hologram_drag_hint">Chạm và vuốt để xoay 360°</string>
 
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>

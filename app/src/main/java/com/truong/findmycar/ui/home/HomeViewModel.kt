@@ -211,6 +211,56 @@ class HomeViewModel(
         }
     }
 
+    fun updateActiveSpotFloorTag(spot: ParkingSpotEntity, tag: String) {
+        viewModelScope.launch {
+            val (currentFloor, bodyNote) = splitFloorAndNote(spot.note)
+            val newFloor = if (currentFloor == tag) null else tag
+            val combined = combineFloorAndNote(newFloor, bodyNote)
+            repository.updateNote(spot.id, combined)
+        }
+    }
+
+    fun updateActiveSpotNoteBody(spot: ParkingSpotEntity, bodyNote: String) {
+        viewModelScope.launch {
+            val (currentFloor, _) = splitFloorAndNote(spot.note)
+            val combined = combineFloorAndNote(currentFloor, bodyNote)
+            repository.updateNote(spot.id, combined)
+        }
+    }
+
+    fun updateActiveSpotPhoto(spotId: Long, photoUri: String?) {
+        viewModelScope.launch {
+            repository.updatePhotoUri(spotId, photoUri)
+        }
+    }
+
+    companion object {
+        val QUICK_FLOOR_TAGS = listOf("B3", "B2", "B1", "Trệt", "Tầng 2")
+
+        fun splitFloorAndNote(rawNote: String): Pair<String?, String> {
+            val trimmed = rawNote.trim()
+            if (trimmed.isEmpty()) return null to ""
+            val matchedTag = QUICK_FLOOR_TAGS.firstOrNull { tag ->
+                trimmed == tag || trimmed.startsWith("$tag • ")
+            }
+            return if (matchedTag != null) {
+                val rest = trimmed.removePrefix(matchedTag).removePrefix(" • ").trimStart()
+                matchedTag to rest
+            } else {
+                null to rawNote
+            }
+        }
+
+        fun combineFloorAndNote(floorTag: String?, bodyNote: String): String {
+            val cleanBody = bodyNote.trimStart()
+            return when {
+                floorTag != null && cleanBody.isNotEmpty() -> "$floorTag • $cleanBody"
+                floorTag != null -> floorTag
+                else -> bodyNote
+            }
+        }
+    }
+
     fun markBarometerNoticeShown() {
         viewModelScope.launch {
             settingsStore.setBarometerNoticeShown(true)

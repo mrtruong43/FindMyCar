@@ -12,14 +12,17 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +49,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -273,8 +278,90 @@ fun ScooterHologramStage(
         lastStepCount = stepCount
     }
 
-    // Stage 2: Tap 360° showroom spin
+    // Stage 2: Tap 360° showroom spin + Interactive Touch-to-Rotate (drag + inertia)
     val spinDeg = remember { Animatable(0f) }
+    val dragYawAnim = remember { Animatable(0f) }
+    val dragPitchAnim = remember { Animatable(0f) }
+
+    val dragModifier = Modifier.pointerInput(mode) {
+        val velocityTracker = VelocityTracker()
+        detectDragGestures(
+            onDragStart = {
+                velocityTracker.resetTracking()
+                scope.launch {
+                    dragYawAnim.stop()
+                    dragPitchAnim.stop()
+                }
+            },
+            onDrag = { change, dragAmount ->
+                change.consume()
+                velocityTracker.addPosition(change.uptimeMillis, change.position)
+                scope.launch {
+                    dragYawAnim.snapTo(dragYawAnim.value + dragAmount.x * 0.45f)
+                    dragPitchAnim.snapTo((dragPitchAnim.value + dragAmount.y * 0.14f).coerceIn(-16f, 16f))
+                }
+            },
+            onDragEnd = {
+                val velX = velocityTracker.calculateVelocity().x
+                scope.launch {
+                    if (mode == HologramStageMode.GUIDING_TO_VEHICLE) {
+                        // Return smoothly to live target compass bearing
+                        launch {
+                            dragYawAnim.animateTo(
+                                targetValue = 0f,
+                                animationSpec = spring(
+                                    dampingRatio = 0.72f,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
+                        }
+                    } else {
+                        // Apply smooth rotational inertia on release
+                        launch {
+                            dragYawAnim.animateDecay(
+                                initialVelocity = velX * 0.42f,
+                                animationSpec = exponentialDecay(frictionMultiplier = 1.8f)
+                            )
+                        }
+                    }
+                    // Gently blend pitch tilt back to ambient gyroscope tilt
+                    launch {
+                        dragPitchAnim.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(
+                                dampingRatio = 0.75f,
+                                stiffness = Spring.StiffnessLow
+                            )
+                        )
+                    }
+                }
+            },
+            onDragCancel = {
+                scope.launch {
+                    if (mode == HologramStageMode.GUIDING_TO_VEHICLE) {
+                        launch {
+                            dragYawAnim.animateTo(
+                                targetValue = 0f,
+                                animationSpec = spring(
+                                    dampingRatio = 0.75f,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            )
+                        }
+                    }
+                    launch {
+                        dragPitchAnim.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(
+                                dampingRatio = 0.75f,
+                                stiffness = Spring.StiffnessLow
+                            )
+                        )
+                    }
+                }
+            }
+        )
+    }
 
     // Stage 3: Continuous unwrapped angles for 60fps shortest-arc rotation
     var cumulativeArrowDeg by remember { mutableFloatStateOf(relativeArrowDeg) }
@@ -346,18 +433,19 @@ fun ScooterHologramStage(
     Box(
         modifier = modifier
             .then(semanticModifier)
-            .then(tapModifier),
+            .then(tapModifier)
+            .then(dragModifier),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val minDim = size.minDimension
             val perspectiveY = 0.46f
-            val baseRadius = minDim * 0.43f * radarZoom *
+            val baseRadius = minOf(size.width * 0.46f, size.height * 0.68f) * radarZoom *
                 (if (mode == HologramStageMode.PARKED_LOCKED) ringTightenScale.value else 1f)
 
             val floorCenterY = when (mode) {
-                HologramStageMode.GUIDING_TO_VEHICLE -> center.y + minDim * 0.05f
-                else -> center.y + minDim * 0.16f
+                HologramStageMode.GUIDING_TO_VEHICLE -> center.y + minDim * 0.06f
+                else -> center.y + size.height * 0.17f
             }
             val floorCenter = Offset(center.x, floorCenterY)
 
@@ -419,10 +507,11 @@ fun ScooterHologramStage(
 
             // Isometric ~35° yaw for showroom stages; live bearing yaw for GUIDING_TO_VEHICLE
             val vehicleYawDeg = when (mode) {
-                HologramStageMode.READY_TO_PARK -> 35f
-                HologramStageMode.PARKED_LOCKED -> 35f + spinDeg.value
-                HologramStageMode.GUIDING_TO_VEHICLE -> animatedArrowDeg
+                HologramStageMode.READY_TO_PARK -> 35f + dragYawAnim.value
+                HologramStageMode.PARKED_LOCKED -> 35f + spinDeg.value + dragYawAnim.value
+                HologramStageMode.GUIDING_TO_VEHICLE -> animatedArrowDeg + dragYawAnim.value
             }
+            val effectivePitchTilt = (tiltPitchDeg + dragPitchAnim.value).coerceIn(-16f, 16f)
 
             val hoverLiftPx = when (mode) {
                 HologramStageMode.READY_TO_PARK -> (sin(hoverPhase) * 3f + 4f).dp.toPx()
@@ -441,13 +530,13 @@ fun ScooterHologramStage(
                 )
             }
 
-            // 2. Volumetric 3D Isometric Vehicle Mesh (Scooter default or Car)
+            // 2. Volumetric 3D Isometric Vehicle Mesh (~1.65x scaled up)
             val vehicleScale = when (mode) {
-                HologramStageMode.GUIDING_TO_VEHICLE -> minDim * 0.21f
-                else -> minDim * 0.27f
+                HologramStageMode.GUIDING_TO_VEHICLE -> minDim * 0.30f
+                else -> minOf(size.width * 0.34f, size.height * 0.44f)
             }
             val vehicleOrigin = Offset(floorCenter.x, floorCenter.y - hoverLiftPx)
-            val alphaScale = if (mode == HologramStageMode.READY_TO_PARK) 0.88f else 1.0f
+            val alphaScale = if (mode == HologramStageMode.READY_TO_PARK) 0.90f else 1.0f
 
             if (vehicleType == VehicleHologramType.CAR) {
                 drawVolumetricCar3D(
@@ -455,7 +544,7 @@ fun ScooterHologramStage(
                     floorOrigin = floorCenter,
                     scale = vehicleScale,
                     yawDeg = vehicleYawDeg,
-                    pitchTiltDeg = tiltPitchDeg,
+                    pitchTiltDeg = effectivePitchTilt,
                     rollTiltDeg = tiltRollDeg,
                     accentColor = animatedTint,
                     alphaScale = alphaScale
@@ -466,7 +555,7 @@ fun ScooterHologramStage(
                     floorOrigin = floorCenter,
                     scale = vehicleScale,
                     yawDeg = vehicleYawDeg,
-                    pitchTiltDeg = tiltPitchDeg,
+                    pitchTiltDeg = effectivePitchTilt,
                     rollTiltDeg = tiltRollDeg,
                     accentColor = animatedTint,
                     alphaScale = alphaScale
