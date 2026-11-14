@@ -251,6 +251,7 @@ fun FindCarScreen(
                             userHeadingDeg = uiState.userHeadingDeg,
                             isVeryClose = isVeryClose,
                             isLowAccuracy = guidance.isCompassLowAccuracy,
+                            interactiveRotationEnabled = false,
                             modifier = Modifier
                                 .size(compassSize)
                                 .semantics { contentDescription = compassA11y }

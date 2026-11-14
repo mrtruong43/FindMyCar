@@ -103,7 +103,8 @@ fun ScooterHologramStage(
     isLowAccuracy: Boolean = false,
     stepCount: Int = 0,
     isTracking: Boolean = false,
-    enableTapSpin: Boolean = (mode == HologramStageMode.PARKED_LOCKED)
+    enableTapSpin: Boolean = (mode == HologramStageMode.PARKED_LOCKED),
+    interactiveRotationEnabled: Boolean = (mode == HologramStageMode.READY_TO_PARK)
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -278,78 +279,59 @@ fun ScooterHologramStage(
         lastStepCount = stepCount
     }
 
-    // Stage 2: Tap 360° showroom spin + Interactive Touch-to-Rotate (drag + inertia)
+    // Stage 2: Tap 360° showroom spin + Stage 1 Interactive Touch-to-Rotate (drag + inertia)
     val spinDeg = remember { Animatable(0f) }
     val dragYawAnim = remember { Animatable(0f) }
     val dragPitchAnim = remember { Animatable(0f) }
 
-    val dragModifier = Modifier.pointerInput(mode) {
-        val velocityTracker = VelocityTracker()
-        detectDragGestures(
-            onDragStart = {
-                velocityTracker.resetTracking()
-                scope.launch {
-                    dragYawAnim.stop()
-                    dragPitchAnim.stop()
-                }
-            },
-            onDrag = { change, dragAmount ->
-                change.consume()
-                velocityTracker.addPosition(change.uptimeMillis, change.position)
-                scope.launch {
-                    dragYawAnim.snapTo(dragYawAnim.value + dragAmount.x * 0.45f)
-                    dragPitchAnim.snapTo((dragPitchAnim.value + dragAmount.y * 0.14f).coerceIn(-16f, 16f))
-                }
-            },
-            onDragEnd = {
-                val velX = velocityTracker.calculateVelocity().x
-                scope.launch {
-                    if (mode == HologramStageMode.GUIDING_TO_VEHICLE) {
-                        // Return smoothly to live target compass bearing
-                        launch {
-                            dragYawAnim.animateTo(
-                                targetValue = 0f,
-                                animationSpec = spring(
-                                    dampingRatio = 0.72f,
-                                    stiffness = Spring.StiffnessMediumLow
-                                )
-                            )
-                        }
-                    } else {
-                        // Apply smooth rotational inertia on release
+    LaunchedEffect(interactiveRotationEnabled) {
+        if (!interactiveRotationEnabled) {
+            dragYawAnim.snapTo(0f)
+            dragPitchAnim.snapTo(0f)
+        }
+    }
+
+    val dragModifier = if (interactiveRotationEnabled) {
+        Modifier.pointerInput(mode) {
+            val velocityTracker = VelocityTracker()
+            detectDragGestures(
+                onDragStart = {
+                    velocityTracker.resetTracking()
+                    scope.launch {
+                        dragYawAnim.stop()
+                        dragPitchAnim.stop()
+                    }
+                },
+                onDrag = { change, dragAmount ->
+                    change.consume()
+                    velocityTracker.addPosition(change.uptimeMillis, change.position)
+                    scope.launch {
+                        dragYawAnim.snapTo(dragYawAnim.value + dragAmount.x * 0.45f)
+                        dragPitchAnim.snapTo((dragPitchAnim.value + dragAmount.y * 0.14f).coerceIn(-16f, 16f))
+                    }
+                },
+                onDragEnd = {
+                    val velX = velocityTracker.calculateVelocity().x
+                    scope.launch {
                         launch {
                             dragYawAnim.animateDecay(
                                 initialVelocity = velX * 0.42f,
                                 animationSpec = exponentialDecay(frictionMultiplier = 1.8f)
                             )
                         }
-                    }
-                    // Gently blend pitch tilt back to ambient gyroscope tilt
-                    launch {
-                        dragPitchAnim.animateTo(
-                            targetValue = 0f,
-                            animationSpec = spring(
-                                dampingRatio = 0.75f,
-                                stiffness = Spring.StiffnessLow
-                            )
-                        )
-                    }
-                }
-            },
-            onDragCancel = {
-                scope.launch {
-                    if (mode == HologramStageMode.GUIDING_TO_VEHICLE) {
                         launch {
-                            dragYawAnim.animateTo(
+                            dragPitchAnim.animateTo(
                                 targetValue = 0f,
                                 animationSpec = spring(
                                     dampingRatio = 0.75f,
-                                    stiffness = Spring.StiffnessMediumLow
+                                    stiffness = Spring.StiffnessLow
                                 )
                             )
                         }
                     }
-                    launch {
+                },
+                onDragCancel = {
+                    scope.launch {
                         dragPitchAnim.animateTo(
                             targetValue = 0f,
                             animationSpec = spring(
@@ -359,8 +341,10 @@ fun ScooterHologramStage(
                         )
                     }
                 }
-            }
-        )
+            )
+        }
+    } else {
+        Modifier
     }
 
     // Stage 3: Continuous unwrapped angles for 60fps shortest-arc rotation

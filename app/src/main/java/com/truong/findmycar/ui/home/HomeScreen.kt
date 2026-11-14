@@ -922,6 +922,7 @@ private fun HeroHologramBentoCard(
                 mode = HologramStageMode.READY_TO_PARK,
                 vehicleType = vehicleType,
                 tintColor = bannerColor,
+                interactiveRotationEnabled = true,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
@@ -1361,7 +1362,7 @@ private fun CarIdentityBentoCard(
                 )
             }
 
-            // Stage 2: 2.5D Hologram Lock-down Stage (tap or swipe to rotate 360°)
+            // Stage 2: 2.5D Hologram Lock-down Stage (locked isometric angle, tap to spin 360°)
             if (!isCompactHeight) {
                 ScooterHologramStage(
                     mode = HologramStageMode.PARKED_LOCKED,
@@ -1369,6 +1370,7 @@ private fun CarIdentityBentoCard(
                     tintColor = stageTint,
                     stepCount = stepCount,
                     isTracking = isTracking,
+                    interactiveRotationEnabled = false,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(112.dp)
