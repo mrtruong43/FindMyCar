@@ -233,8 +233,8 @@
     <string name="home_sensor_card_title">Cảm biến &amp; Tự động</string>
     <string name="home_barometer_hpa">%1$.0f hPa</string>
     <string name="home_barometer_na">Không có áp kế</string>
-    <string name="home_auto_detect_on">Tự động phát hiện: BẬT</string>
-    <string name="home_auto_detect_off">Tự động phát hiện: TẮT</string>
+    <string name="home_auto_detect_on">Tự động: Bật</string>
+    <string name="home_auto_detect_off">Tự động: Tắt</string>
     <string name="home_recent_spot_title">Lần đỗ gần nhất</string>
     <string name="home_quick_readiness_title">Sẵn sàng ghi nhớ vị trí</string>
     <string name="home_quick_step_1">1. Tự động chọn GPS ngoài trời hoặc quét bước trong hầm</string>
@@ -246,6 +246,16 @@
     <string name="home_floor_delta_same">Cùng tầng</string>
     <string name="home_floor_delta_up">+%1$d tầng</string>
     <string name="home_floor_delta_down">-%1$d tầng</string>
+
+    <!-- Option 1: Reactive Preview Banner & Pre-Save Quick Context Card -->
+    <string name="home_preview_auto_outdoor">Tự động: GPS tốt (%1$dm) — sẽ lưu tọa độ ngoài trời</string>
+    <string name="home_preview_auto_underground">Tự động: GPS yếu — sẽ tự bật quét bước chân dưới hầm</string>
+    <string name="home_preview_underground">Chế độ Hầm: Bỏ qua GPS, kích hoạt đếm bước &amp; áp suất ngay khi lưu</string>
+    <string name="home_preview_outdoor">Chế độ Ngoài trời: Đang làm mới tín hiệu GPS...</string>
+    <string name="home_quick_floor_label">Chọn nhanh tầng đỗ</string>
+    <string name="home_quick_note_placeholder">Ghi chú cột/khu vực (VD: Cột A4)...</string>
+    <string name="home_quick_camera_cd">Chụp ảnh vị trí đỗ xe</string>
+    <string name="home_quick_remove_photo_cd">Xóa ảnh đã chụp</string>
 
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>

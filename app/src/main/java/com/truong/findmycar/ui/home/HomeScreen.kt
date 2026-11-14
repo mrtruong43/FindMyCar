@@ -7,6 +7,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.Uri
 import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,6 +28,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -37,13 +39,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Settings
@@ -53,6 +59,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -93,6 +101,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.truong.findmycar.R
 import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.detect.ParkingEnvironmentMode
@@ -229,6 +238,34 @@ fun HomeScreen(
         viewModel.saveManualSpot()
     }
 
+    var pendingDraftPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    val takeDraftPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        val uri = pendingDraftPhotoUri
+        if (success && uri != null) {
+            viewModel.setDraftPhotoUri(uri.toString())
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    val onModeSelected: (ParkingEnvironmentMode) -> Unit = { mode ->
+        viewModel.selectEnvironmentMode(mode)
+        if (mode == ParkingEnvironmentMode.OUTDOOR && hasForegroundLocation) {
+            val client = LocationServices.getFusedLocationProviderClient(context)
+            val cts = CancellationTokenSource()
+            try {
+                client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                    .addOnSuccessListener { loc ->
+                        if (loc != null && loc.hasAccuracy()) {
+                            liveGpsAccuracyM = loc.accuracy
+                        }
+                    }
+            } catch (_: SecurityException) {
+            }
+        }
+    }
+
     val onRequestSave: () -> Unit = {
         if (!uiState.isSaving) {
             if (Permissions.hasLocationPermission(context)) {
@@ -295,6 +332,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
+                    .imePadding()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -325,12 +363,23 @@ fun HomeScreen(
                             liveGpsAccuracyM = liveGpsAccuracyM,
                             livePressureHpa = livePressureHpa,
                             autoDetectEnabled = uiState.autoDetectEnabled,
-                            latestHistorySpot = uiState.latestHistorySpot,
-                            floorHeightM = uiState.floorHeightM,
                             selectedEnvironmentMode = uiState.selectedEnvironmentMode,
-                            onEnvironmentModeSelected = viewModel::selectEnvironmentMode,
-                            onSaveClick = onRequestSave,
-                            onOpenHistory = onOpenHistory
+                            draftFloorTag = uiState.draftFloorTag,
+                            draftNote = uiState.draftNote,
+                            draftPhotoUri = uiState.draftPhotoUri,
+                            onEnvironmentModeSelected = onModeSelected,
+                            onFloorTagToggle = viewModel::toggleDraftFloorTag,
+                            onDraftNoteChanged = viewModel::onDraftNoteChanged,
+                            onTakePhotoClick = {
+                                try {
+                                    val uri = PhotoUtils.createPhotoUri(context)
+                                    pendingDraftPhotoUri = uri
+                                    takeDraftPhotoLauncher.launch(uri)
+                                } catch (_: Exception) {
+                                }
+                            },
+                            onRemovePhotoClick = { viewModel.setDraftPhotoUri(null) },
+                            onSaveClick = onRequestSave
                         )
                     } else {
                         ActiveHomeBentoLayout(
@@ -513,12 +562,16 @@ private fun EmptyHomeBentoLayout(
     liveGpsAccuracyM: Float?,
     livePressureHpa: Float?,
     autoDetectEnabled: Boolean,
-    latestHistorySpot: ParkingSpotEntity?,
-    floorHeightM: Float,
     selectedEnvironmentMode: ParkingEnvironmentMode,
+    draftFloorTag: String?,
+    draftNote: String,
+    draftPhotoUri: String?,
     onEnvironmentModeSelected: (ParkingEnvironmentMode) -> Unit,
-    onSaveClick: () -> Unit,
-    onOpenHistory: () -> Unit
+    onFloorTagToggle: (String) -> Unit,
+    onDraftNoteChanged: (String) -> Unit,
+    onTakePhotoClick: () -> Unit,
+    onRemovePhotoClick: () -> Unit,
+    onSaveClick: () -> Unit
 ) {
     val isStrongGps = liveGpsAccuracyM != null && liveGpsAccuracyM <= 20f
 
@@ -598,11 +651,17 @@ private fun EmptyHomeBentoLayout(
                     )
                 }
 
-                // Bento Card 2: Recent Spot / Quick Context Card filling remaining middle height
-                RecentOrReadinessBentoCard(
-                    latestHistorySpot = latestHistorySpot,
-                    floorHeightM = floorHeightM,
-                    onClick = onOpenHistory,
+                // Bento Card 2: Non-clickable Pre-Save Quick Context Card
+                PreSaveQuickContextBentoCard(
+                    selectedMode = selectedEnvironmentMode,
+                    gpsAccuracyM = liveGpsAccuracyM,
+                    selectedFloorTag = draftFloorTag,
+                    noteText = draftNote,
+                    photoUri = draftPhotoUri,
+                    onFloorTagToggle = onFloorTagToggle,
+                    onNoteChanged = onDraftNoteChanged,
+                    onTakePhotoClick = onTakePhotoClick,
+                    onRemovePhotoClick = onRemovePhotoClick,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -767,15 +826,50 @@ private fun SensorsBentoCard(
 }
 
 @Composable
-private fun RecentOrReadinessBentoCard(
-    latestHistorySpot: ParkingSpotEntity?,
-    floorHeightM: Float,
-    onClick: () -> Unit,
+private fun PreSaveQuickContextBentoCard(
+    selectedMode: ParkingEnvironmentMode,
+    gpsAccuracyM: Float?,
+    selectedFloorTag: String?,
+    noteText: String,
+    photoUri: String?,
+    onFloorTagToggle: (String) -> Unit,
+    onNoteChanged: (String) -> Unit,
+    onTakePhotoClick: () -> Unit,
+    onRemovePhotoClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var photoBitmap by remember(photoUri) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(photoUri) {
+        photoBitmap = photoUri?.let { uri ->
+            PhotoUtils.loadSampledBitmap(context, uri, maxDimensionPx = 256)
+        }
+    }
+
+    val isStrongGps = gpsAccuracyM != null && gpsAccuracyM <= 20f
+    val (bannerColor, bannerText) = when (selectedMode) {
+        ParkingEnvironmentMode.AUTO -> {
+            if (isStrongGps) {
+                MintAccent to stringResource(
+                    R.string.home_preview_auto_outdoor,
+                    gpsAccuracyM!!.roundToInt()
+                )
+            } else {
+                WarningAmber to stringResource(R.string.home_preview_auto_underground)
+            }
+        }
+        ParkingEnvironmentMode.UNDERGROUND -> {
+            WarningAmber to stringResource(R.string.home_preview_underground)
+        }
+        ParkingEnvironmentMode.OUTDOOR -> {
+            MintAccent to stringResource(R.string.home_preview_outdoor)
+        }
+    }
+
+    val floorChips = listOf("B3", "B2", "B1", "Trệt", "Tầng 2")
+    val basementChips = setOf("B3", "B2", "B1")
+
     Surface(
-        onClick = onClick,
         shape = RoundedCornerShape(24.dp),
         color = BentoCardSurface,
         border = BorderStroke(1.dp, BentoCardBorder),
@@ -784,87 +878,222 @@ private fun RecentOrReadinessBentoCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (latestHistorySpot != null) {
+            // 1. Dynamic Mode Preview Banner
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = bannerColor.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, bannerColor.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.home_recent_spot_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(bannerColor)
                     )
-                    EnvironmentBadgePill(spot = latestHistorySpot)
+                    Text(
+                        text = bannerText,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = bannerColor
+                    )
                 }
+            }
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = formatElapsedTime(context, latestHistorySpot.savedAt, System.currentTimeMillis()),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MintAccent
-                    )
-                    val floorDeltaText = latestHistorySpot.anchorRelHeightM?.let { relH ->
-                        val delta = GeoMath.estimateFloorDelta(-relH, floorHeightM)
-                        when {
-                            delta > 0 -> stringResource(R.string.home_floor_delta_up, delta)
-                            delta < 0 -> stringResource(R.string.home_floor_delta_down, abs(delta))
-                            else -> stringResource(R.string.home_floor_delta_same)
+            // 2. 1-Tap Floor Selector Chips
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = stringResource(R.string.home_quick_floor_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    floorChips.forEach { tag ->
+                        val isSelected = selectedFloorTag == tag
+                        val highlightBasement =
+                            selectedMode == ParkingEnvironmentMode.UNDERGROUND &&
+                                tag in basementChips &&
+                                !isSelected
+                        val chipBg = when {
+                            isSelected -> MintAccent
+                            highlightBasement -> WarningAmber.copy(alpha = 0.14f)
+                            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+                        }
+                        val chipBorder = when {
+                            isSelected -> MintAccent
+                            highlightBasement -> WarningAmber.copy(alpha = 0.55f)
+                            else -> BentoCardBorder
+                        }
+                        val chipTextColor = when {
+                            isSelected -> MaterialTheme.colorScheme.onPrimary
+                            highlightBasement -> WarningAmber
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+
+                        Surface(
+                            onClick = { onFloorTagToggle(tag) },
+                            shape = CircleShape,
+                            color = chipBg,
+                            border = BorderStroke(1.dp, chipBorder),
+                            modifier = Modifier.heightIn(min = 38.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = tag,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (isSelected || highlightBasement) {
+                                        FontWeight.SemiBold
+                                    } else {
+                                        FontWeight.Normal
+                                    },
+                                    color = chipTextColor
+                                )
+                            }
                         }
                     }
-                    if (floorDeltaText != null) {
-                        FloorBadge(label = floorDeltaText)
-                    }
-                    if (latestHistorySpot.note.isNotBlank()) {
+                }
+            }
+
+            // 3. Inline Pillar Note + 48.dp Camera Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = noteText,
+                    onValueChange = onNoteChanged,
+                    placeholder = {
                         Text(
-                            text = latestHistorySpot.note,
+                            text = stringResource(R.string.home_quick_note_placeholder),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MintAccent,
+                        unfocusedBorderColor = BentoCardBorder,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.35f)
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                val cameraCd = stringResource(R.string.home_quick_camera_cd)
+                Surface(
+                    onClick = onTakePhotoClick,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, BentoCardBorder),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .semantics { contentDescription = cameraCd }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        CameraThinIcon(tint = MintAccent)
                     }
                 }
+            }
 
-                Text(
-                    text = stringResource(R.string.home_history_cd),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MintAccent
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.home_quick_readiness_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = stringResource(R.string.home_quick_step_1),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            // Compact removable photo thumbnail once captured
+            photoBitmap?.let { bmp ->
+                Box(
+                    modifier = Modifier.size(60.dp)
+                ) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = stringResource(R.string.detail_photo_cd),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(12.dp))
                     )
-                    Text(
-                        text = stringResource(R.string.home_quick_step_2),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = stringResource(R.string.home_quick_step_3),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Surface(
+                        onClick = onRemovePhotoClick,
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.72f),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(2.dp)
+                            .size(20.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = stringResource(R.string.home_quick_remove_photo_cd),
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(2.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun CameraThinIcon(tint: Color) {
+    Canvas(modifier = Modifier.size(22.dp)) {
+        val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
+        val w = size.width
+        val h = size.height
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(w * 0.08f, h * 0.24f),
+            size = androidx.compose.ui.geometry.Size(w * 0.84f, h * 0.62f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+            style = stroke
+        )
+        drawCircle(
+            color = tint,
+            radius = h * 0.16f,
+            center = Offset(w * 0.5f, h * 0.55f),
+            style = stroke
+        )
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.34f, h * 0.24f),
+            end = Offset(w * 0.42f, h * 0.14f),
+            strokeWidth = 1.8.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.42f, h * 0.14f),
+            end = Offset(w * 0.58f, h * 0.14f),
+            strokeWidth = 1.8.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.58f, h * 0.14f),
+            end = Offset(w * 0.66f, h * 0.24f),
+            strokeWidth = 1.8.dp.toPx(),
+            cap = StrokeCap.Round
+        )
     }
 }
 

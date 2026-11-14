@@ -68,7 +68,9 @@ class ParkingDetector(
     private var drivingTimeoutJob: Job? = null
 
     suspend fun saveManualSpot(
-        environmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO
+        environmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO,
+        note: String = "",
+        photoUri: String? = null
     ): SaveSpotResult = saveMutex.withLock {
         val nowMs = System.currentTimeMillis()
         if (!stateMachine.canSaveParkingSpot(nowMs)) {
@@ -84,7 +86,9 @@ class ParkingDetector(
         executeParkingSave(
             source = SpotSource.MANUAL,
             fromAutoDetect = false,
-            requestedMode = environmentMode
+            requestedMode = environmentMode,
+            note = note,
+            photoUri = photoUri
         )
     }
 
@@ -155,7 +159,9 @@ class ParkingDetector(
     private suspend fun executeParkingSave(
         source: String,
         fromAutoDetect: Boolean,
-        requestedMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO
+        requestedMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO,
+        note: String = "",
+        photoUri: String? = null
     ): SaveSpotResult = coroutineScope {
         val buffered = if (fromAutoDetect) recentLocationBuffer.getBestRecentLocation() else null
 
@@ -186,6 +192,8 @@ class ParkingDetector(
             accuracyM = finalAcc,
             pressureHpa = pressureHpa,
             source = source,
+            note = note,
+            photoUri = photoUri,
             environmentMode = resolvedMode.name
         )
 

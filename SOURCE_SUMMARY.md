@@ -12,7 +12,7 @@
   - Jetpack Compose (Material 3, Dark Mode mặc định, tắt Dynamic Color, màu nhấn `#2EE6A6`).
   - Room `2.7.2`, DataStore Preferences `1.1.7`, Navigation Compose `2.9.0`, Google Play Services Location `21.3.0`.
   - **Lưu ý build CLI:** Cần trỏ `JAVA_HOME` tới JDK 17 (`C:\Users\Thu\AppData\Local\Programs\openjdk-17\jdk-17.0.19+10`).
-- **File APK hiện tại:** `findmycar-debug.apk` (`13,505,588` bytes / ~12.88 MB).
+- **File APK hiện tại:** `findmycar-debug.apk` (`13,509,192` bytes / ~12.88 MB).
 - **Unit test:** 29/29 test pass trên JVM (không phụ thuộc thiết bị Android).
 
 ---
@@ -51,7 +51,7 @@ app/src/main/java/com/truong/findmycar/
 │   ├── theme/                      # Color.kt (#0B0F14, BentoCardSurface #131A22 88%, #2EE6A6, #FFB020), Shape.kt, Type.kt, Theme.kt
 │   ├── components/                 # ArrowCompass.kt (ticks N/E/S/W + radar rings), FloorBadge.kt, TimeFormat.kt, BatteryOptimizationCard.kt, EditAnchorBottomSheet.kt
 │   ├── onboarding/                 # OnboardingScreen.kt (3 bước, xin quyền 2 bước, tối ưu pin Samsung)
-│   ├── home/                       # HomeViewModel.kt, HomeScreen.kt (Bento Auto-Layout 22:9, GPS/Sensor Bento cards, Recent/Readiness card, Bottom Thumb Dock, Compact Guard <450dp)
+│   ├── home/                       # HomeViewModel.kt, HomeScreen.kt (Bento Auto-Layout 22:9, GPS/Sensor Bento cards, Pre-Save Quick Context Card, Reactive 3-mode selector, Compact Guard <450dp)
 │   ├── detail/                     # SpotDetailViewModel.kt, SpotDetailScreen.kt (ghi chú, giọng nói vi-VN, ảnh, geo:)
 │   ├── find/                       # FindCarViewModel.kt, FindCarScreen.kt (Compass weight(1f) + Unified frosted-glass Bottom Dock 28.dp)
 │   ├── history/                    # HistoryViewModel.kt, HistoryScreen.kt (danh sách FOUND/ARCHIVED, xem chi tiết, chia sẻ, xóa kèm file ảnh)

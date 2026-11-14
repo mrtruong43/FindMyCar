@@ -21,6 +21,12 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+data class PreSaveDraft(
+    val floorTag: String? = null,
+    val note: String = "",
+    val photoUri: String? = null
+)
+
 data class HomeUiState(
     val activeSpot: ParkingSpotEntity? = null,
     val latestHistorySpot: ParkingSpotEntity? = null,
@@ -31,7 +37,10 @@ data class HomeUiState(
     val autoDetectEnabled: Boolean = true,
     val barometerNoticeShown: Boolean = false,
     val floorHeightM: Float = 3.2f,
-    val selectedEnvironmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO
+    val selectedEnvironmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO,
+    val draftFloorTag: String? = null,
+    val draftNote: String = "",
+    val draftPhotoUri: String? = null
 )
 
 class HomeViewModel(
@@ -42,6 +51,7 @@ class HomeViewModel(
 
     private val isSavingFlow = MutableStateFlow(false)
     private val selectedEnvironmentModeFlow = MutableStateFlow(ParkingEnvironmentMode.AUTO)
+    private val preSaveDraftFlow = MutableStateFlow(PreSaveDraft())
 
     val uiState: StateFlow<HomeUiState> = combine(
         repository.activeSpot,
@@ -51,7 +61,8 @@ class HomeViewModel(
         TrackingStateHolder.elapsedSeconds,
         TrackingStateHolder.telemetry,
         settingsStore.settings,
-        selectedEnvironmentModeFlow
+        selectedEnvironmentModeFlow,
+        preSaveDraftFlow
     ) { values ->
         val spot = values[0] as ParkingSpotEntity?
         val latestHistory = values[1] as ParkingSpotEntity?
@@ -61,6 +72,7 @@ class HomeViewModel(
         val telemetry = values[5] as com.truong.findmycar.tracking.TrackingTelemetry
         val settings = values[6] as com.truong.findmycar.data.AppSettings
         val selectedMode = values[7] as ParkingEnvironmentMode
+        val draft = values[8] as PreSaveDraft
         HomeUiState(
             activeSpot = spot,
             latestHistorySpot = latestHistory,
@@ -71,7 +83,10 @@ class HomeViewModel(
             autoDetectEnabled = settings.autoDetectEnabled,
             barometerNoticeShown = settings.barometerNoticeShown,
             floorHeightM = settings.floorHeightM,
-            selectedEnvironmentMode = selectedMode
+            selectedEnvironmentMode = selectedMode,
+            draftFloorTag = draft.floorTag,
+            draftNote = draft.note,
+            draftPhotoUri = draft.photoUri
         )
     }.stateIn(
         scope = viewModelScope,
@@ -89,15 +104,43 @@ class HomeViewModel(
         selectedEnvironmentModeFlow.value = mode
     }
 
+    fun toggleDraftFloorTag(tag: String) {
+        val current = preSaveDraftFlow.value
+        preSaveDraftFlow.value = current.copy(
+            floorTag = if (current.floorTag == tag) null else tag
+        )
+    }
+
+    fun onDraftNoteChanged(note: String) {
+        preSaveDraftFlow.value = preSaveDraftFlow.value.copy(note = note)
+    }
+
+    fun setDraftPhotoUri(uri: String?) {
+        preSaveDraftFlow.value = preSaveDraftFlow.value.copy(photoUri = uri)
+    }
+
     fun saveManualSpot() {
         if (isSavingFlow.value) return
         viewModelScope.launch {
             isSavingFlow.value = true
             try {
                 val mode = selectedEnvironmentModeFlow.value
-                val result = parkingDetector.saveManualSpot(environmentMode = mode)
+                val draft = preSaveDraftFlow.value
+                val trimmedNote = draft.note.trim()
+                val bundledNote = when {
+                    draft.floorTag != null && trimmedNote.isNotEmpty() ->
+                        "${draft.floorTag} • $trimmedNote"
+                    draft.floorTag != null -> draft.floorTag
+                    else -> trimmedNote
+                }
+                val result = parkingDetector.saveManualSpot(
+                    environmentMode = mode,
+                    note = bundledNote,
+                    photoUri = draft.photoUri
+                )
                 if (!result.skippedDuplicate) {
                     selectedEnvironmentModeFlow.value = ParkingEnvironmentMode.AUTO
+                    preSaveDraftFlow.value = PreSaveDraft()
                 }
                 _saveEvents.tryEmit(result)
             } finally {
