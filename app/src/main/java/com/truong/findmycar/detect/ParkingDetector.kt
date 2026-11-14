@@ -47,7 +47,9 @@ data class SaveSpotResult(
     val spotId: Long,
     val hasLocation: Boolean,
     val hasPressure: Boolean,
-    val skippedDuplicate: Boolean = false
+    val skippedDuplicate: Boolean = false,
+    val shouldStartTracking: Boolean = true,
+    val resolvedMode: ParkingEnvironmentMode = ParkingEnvironmentMode.UNDERGROUND
 )
 
 class ParkingDetector(
@@ -65,7 +67,9 @@ class ParkingDetector(
     private var drivingCallback: LocationCallback? = null
     private var drivingTimeoutJob: Job? = null
 
-    suspend fun saveManualSpot(): SaveSpotResult = saveMutex.withLock {
+    suspend fun saveManualSpot(
+        environmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO
+    ): SaveSpotResult = saveMutex.withLock {
         val nowMs = System.currentTimeMillis()
         if (!stateMachine.canSaveParkingSpot(nowMs)) {
             return@withLock SaveSpotResult(
@@ -77,7 +81,11 @@ class ParkingDetector(
         }
 
         stateMachine.recordSpotSaved(nowMs)
-        executeParkingSave(source = SpotSource.MANUAL, fromAutoDetect = false)
+        executeParkingSave(
+            source = SpotSource.MANUAL,
+            fromAutoDetect = false,
+            requestedMode = environmentMode
+        )
     }
 
     suspend fun updateAnchorToCurrentPosition(spot: ParkingSpotEntity): Boolean = coroutineScope {
@@ -131,9 +139,13 @@ class ParkingDetector(
         if (!stateMachine.canSaveParkingSpot(nowMs)) return@withLock
         stateMachine.recordSpotSaved(nowMs)
 
-        val result = executeParkingSave(source = SpotSource.AUTO_ACTIVITY, fromAutoDetect = true)
+        val result = executeParkingSave(
+            source = SpotSource.AUTO_ACTIVITY,
+            fromAutoDetect = true,
+            requestedMode = ParkingEnvironmentMode.AUTO
+        )
         if (result.spotId > 0L) {
-            if (Permissions.hasForegroundLocation(context)) {
+            if (result.shouldStartTracking && Permissions.hasForegroundLocation(context)) {
                 TrackingService.start(context, result.spotId)
             }
             postAutoSavedNotification(result.spotId)
@@ -142,7 +154,8 @@ class ParkingDetector(
 
     private suspend fun executeParkingSave(
         source: String,
-        fromAutoDetect: Boolean
+        fromAutoDetect: Boolean,
+        requestedMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO
     ): SaveSpotResult = coroutineScope {
         val buffered = if (fromAutoDetect) recentLocationBuffer.getBestRecentLocation() else null
 
@@ -166,18 +179,22 @@ class ParkingDetector(
             null
         }
 
+        val resolvedMode = ParkingEnvironmentResolver.resolve(requestedMode, finalAcc)
         val spotId = repository.saveNewSpot(
             lat = finalLat,
             lon = finalLon,
             accuracyM = finalAcc,
             pressureHpa = pressureHpa,
-            source = source
+            source = source,
+            environmentMode = resolvedMode.name
         )
 
         SaveSpotResult(
             spotId = spotId,
             hasLocation = finalLat != null && finalLon != null,
-            hasPressure = pressureHpa != null
+            hasPressure = pressureHpa != null,
+            shouldStartTracking = ParkingEnvironmentResolver.shouldStartTrackingService(resolvedMode),
+            resolvedMode = resolvedMode
         )
     }
 

@@ -218,6 +218,13 @@
     <string name="anchor_updated_toast">Đã cập nhật vị trí lối ra/thang máy</string>
     <string name="anchor_cleared_toast">Đã xóa điểm neo, sẽ dẫn đường trực tiếp tới xe</string>
 
+    <!-- Home Empty-State Live GPS Pill & 3-Mode Selector -->
+    <string name="home_env_gps_strong">GPS mạnh (%1$dm) • Sẵn sàng ngoài trời</string>
+    <string name="home_env_gps_weak">Tín hiệu GPS yếu • Sẵn sàng quét hầm</string>
+    <string name="home_mode_auto">Tự động</string>
+    <string name="home_mode_underground">Trong hầm</string>
+    <string name="home_mode_outdoor">Ngoài trời</string>
+
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>
 </resources>

@@ -1,5 +1,6 @@
 package com.truong.findmycar.guidance
 
+import com.truong.findmycar.detect.ParkingEnvironmentMode
 import com.truong.findmycar.tracking.PathPoint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -174,5 +175,44 @@ class GuidanceEngineTest {
         assertEquals(GuidancePhase.PHASE2_FOOTPRINT, p2State.phase)
         // Must start at anchor endpoint (0, 200) -> ~200m remaining to car (0, 0), NOT VERY_CLOSE
         assertEquals(200f, p2State.distanceMeters ?: 0f, 1.0f)
+    }
+
+    @Test
+    fun explicitUndergroundModeUsesFootprintFlowEvenWithStrongCarGps() {
+        val engine = GuidanceEngine(
+            GuidanceTargetInfo(
+                carLat = 10.7769,
+                carLon = 106.7009,
+                anchorLat = 10.7775,
+                anchorLon = 106.7015,
+                anchorRelHeightM = 0.2f,
+                footprint = listOf(PathPoint(0f, 0f), PathPoint(0f, 40f)),
+                carAccuracyM = 6f,
+                anchorSet = true,
+                environmentMode = ParkingEnvironmentMode.UNDERGROUND
+            )
+        )
+        assertEquals(GuidancePhase.PHASE1_GPS_TO_ANCHOR, engine.currentState().phase)
+        val p2 = engine.enterPhase2()
+        assertEquals(GuidancePhase.PHASE2_FOOTPRINT, p2.phase)
+        assertEquals(40f, p2.distanceMeters ?: 0f, 1.0f)
+    }
+
+    @Test
+    fun explicitOutdoorModeRoutesDirectToCarEvenWithWeakCarGpsAndFootprint() {
+        val engine = GuidanceEngine(
+            GuidanceTargetInfo(
+                carLat = 10.7769,
+                carLon = 106.7009,
+                anchorLat = 10.7775,
+                anchorLon = 106.7015,
+                anchorRelHeightM = 4.0f,
+                footprint = listOf(PathPoint(0f, 0f), PathPoint(0f, 40f)),
+                carAccuracyM = 60f,
+                anchorSet = true,
+                environmentMode = ParkingEnvironmentMode.OUTDOOR
+            )
+        )
+        assertEquals(GuidancePhase.PHASE1_GPS_TO_CAR, engine.currentState().phase)
     }
 }

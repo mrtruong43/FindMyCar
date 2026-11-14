@@ -134,7 +134,10 @@ class FindCarViewModel(
                 floorHeightM = settings.floorHeightM,
                 hasBarometer = hasBarometer,
                 carAccuracyM = spot?.accuracyM,
-                anchorSet = spot?.anchorSet ?: false
+                anchorSet = spot?.anchorSet ?: false,
+                environmentMode = com.truong.findmycar.detect.ParkingEnvironmentResolver.fromStorageName(
+                    spot?.environmentMode
+                )
             )
             val createdEngine = GuidanceEngine(targetInfo)
             engine = createdEngine

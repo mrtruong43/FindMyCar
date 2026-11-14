@@ -36,7 +36,8 @@ class ParkingRepository(
         source: String = SpotSource.MANUAL,
         note: String = "",
         photoUri: String? = null,
-        savedAt: Long = System.currentTimeMillis()
+        savedAt: Long = System.currentTimeMillis(),
+        environmentMode: String = "AUTO"
     ): Long {
         val entity = ParkingSpotEntity(
             savedAt = savedAt,
@@ -47,7 +48,8 @@ class ParkingRepository(
             note = note,
             photoUri = photoUri,
             source = source,
-            status = SpotStatus.ACTIVE
+            status = SpotStatus.ACTIVE,
+            environmentMode = environmentMode
         )
         return parkingSpotDao.insertAsSingleActive(entity)
     }

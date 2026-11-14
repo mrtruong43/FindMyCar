@@ -12,8 +12,8 @@
   - Jetpack Compose (Material 3, Dark Mode mặc định, tắt Dynamic Color, màu nhấn `#2EE6A6`).
   - Room `2.7.2`, DataStore Preferences `1.1.7`, Navigation Compose `2.9.0`, Google Play Services Location `21.3.0`.
   - **Lưu ý build CLI:** Cần trỏ `JAVA_HOME` tới JDK 17 (`C:\Users\Thu\AppData\Local\Programs\openjdk-17\jdk-17.0.19+10`).
-- **File APK hiện tại:** `findmycar-debug.apk` (`12,854,198` bytes / ~12.26 MB).
-- **Unit test:** 24/24 test pass trên JVM (không phụ thuộc thiết bị Android).
+- **File APK hiện tại:** `findmycar-debug.apk` (`13,497,144` bytes / ~12.87 MB).
+- **Unit test:** 29/29 test pass trên JVM (không phụ thuộc thiết bị Android).
 
 ---
 
@@ -33,7 +33,8 @@ app/src/main/java/com/truong/findmycar/
 │   ├── BootReceiver.kt               # RECEIVE_BOOT_COMPLETED -> đăng ký lại ActivityTransition
 │   ├── RecentLocationBuffer.kt       # Ring buffer 5 phút, lọc fix <= 50m
 │   ├── ParkingStateMachine.kt        # Thuần Kotlin: luật 2 phút & chống trùng 90s
-│   └── ParkingDetector.kt            # Lưu thủ công & tự động, LocationUpdates khi lái xe, barometer 2s, notification
+│   ├── ParkingEnvironmentMode.kt     # Thuần Kotlin: 3 chế độ AUTO / UNDERGROUND / OUTDOOR & resolver
+│   └── ParkingDetector.kt            # Lưu thủ công (theo 3 chế độ) & tự động, LocationUpdates khi lái xe, barometer 2s, notification
 ├── guidance/
 │   ├── CircularFilter.kt           # Thuần Kotlin: lọc thông thấp góc trên sin/cos
 │   └── GuidanceEngine.kt           # Thuần Kotlin: điều hướng 2 pha (GPS tới neo -> đảo dấu chân hầm), chế độ ngoài trời thẳng tới xe, guard VERY_CLOSE
@@ -50,7 +51,7 @@ app/src/main/java/com/truong/findmycar/
 │   ├── theme/                      # Color.kt, Shape.kt, Type.kt, Theme.kt
 │   ├── components/                 # ArrowCompass.kt, FloorBadge.kt, TimeFormat.kt, BatteryOptimizationCard.kt, EditAnchorBottomSheet.kt
 │   ├── onboarding/                 # OnboardingScreen.kt (3 bước, xin quyền 2 bước, tối ưu pin Samsung)
-│   ├── home/                       # HomeViewModel.kt, HomeScreen.kt (banner thiếu quyền, thông báo thiếu khí áp kế, TalkBack)
+│   ├── home/                       # HomeViewModel.kt, HomeScreen.kt (pill GPS realtime, selector 3 chế độ, vòng radar, banner thiếu quyền)
 │   ├── detail/                     # SpotDetailViewModel.kt, SpotDetailScreen.kt (ghi chú, giọng nói vi-VN, ảnh, geo:)
 │   ├── find/                       # FindCarViewModel.kt, FindCarScreen.kt (Precision Finding, rung theo khoảng cách, TalkBack)
 │   ├── history/                    # HistoryViewModel.kt, HistoryScreen.kt (danh sách FOUND/ARCHIVED, xem chi tiết, chia sẻ, xóa kèm file ảnh)

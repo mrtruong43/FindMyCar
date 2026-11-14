@@ -1,12 +1,16 @@
 package com.truong.findmycar.ui.home
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.hardware.Sensor
 import android.hardware.SensorManager
+import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -24,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -60,6 +65,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -72,12 +78,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.truong.findmycar.R
 import com.truong.findmycar.data.db.ParkingSpotEntity
+import com.truong.findmycar.detect.ParkingEnvironmentMode
 import com.truong.findmycar.tracking.TrackingService
 import com.truong.findmycar.ui.components.EditAnchorBottomSheet
 import com.truong.findmycar.ui.components.FloorBadge
@@ -86,6 +99,7 @@ import com.truong.findmycar.ui.theme.WarningAmber
 import com.truong.findmycar.util.Permissions
 import com.truong.findmycar.util.PhotoUtils
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 @Composable
 fun HomeScreen(
@@ -100,6 +114,11 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
     var showEditAnchorSheet by remember { mutableStateOf(false) }
+    var liveGpsAccuracyM by remember { mutableStateOf<Float?>(null) }
+    val isEmptyState = uiState.activeSpot == null
+    var hasForegroundLocation by remember {
+        mutableStateOf(Permissions.hasForegroundLocation(context))
+    }
 
     var hasMissingAutoDetectPerm by remember {
         mutableStateOf(
@@ -110,12 +129,46 @@ fun HomeScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
+                hasForegroundLocation = Permissions.hasForegroundLocation(context)
                 hasMissingAutoDetectPerm =
                     !Permissions.hasForegroundLocation(context) || !Permissions.hasActivityRecognition(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Lightweight passive GPS accuracy sampling only while on empty-state Home screen.
+    @SuppressLint("MissingPermission")
+    DisposableEffect(isEmptyState, hasForegroundLocation) {
+        if (!isEmptyState || !hasForegroundLocation) {
+            onDispose { }
+        } else {
+            val client = LocationServices.getFusedLocationProviderClient(context)
+            client.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null && loc.hasAccuracy()) {
+                    liveGpsAccuracyM = loc.accuracy
+                }
+            }
+            val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 5_000L)
+                .setMinUpdateIntervalMillis(2_500L)
+                .build()
+            val callback = object : LocationCallback() {
+                override fun onLocationResult(result: LocationResult) {
+                    val loc = result.lastLocation ?: return
+                    if (loc.hasAccuracy()) {
+                        liveGpsAccuracyM = loc.accuracy
+                    }
+                }
+            }
+            try {
+                client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+            } catch (_: SecurityException) {
+            }
+            onDispose {
+                client.removeLocationUpdates(callback)
+            }
+        }
     }
 
     LaunchedEffect(uiState.barometerNoticeShown) {
@@ -155,7 +208,7 @@ fun HomeScreen(
                 )
                 return@collect
             }
-            if (Permissions.hasForegroundLocation(context)) {
+            if (result.shouldStartTracking && Permissions.hasForegroundLocation(context)) {
                 TrackingService.start(context, result.spotId)
             }
             val msg = if (result.hasLocation) {
@@ -212,8 +265,11 @@ fun HomeScreen(
                     EmptyHomeContent(
                         isSaving = uiState.isSaving,
                         isCompactHeight = isCompactHeight,
-                        circleDiameter = minOf(boxMaxWidth * 0.46f, boxMaxHeight * 0.34f).coerceIn(132.dp, 196.dp),
+                        circleDiameter = minOf(boxMaxWidth * 0.46f, boxMaxHeight * 0.32f).coerceIn(132.dp, 192.dp),
                         horizontalPadding = horizontalPadding,
+                        liveGpsAccuracyM = liveGpsAccuracyM,
+                        selectedEnvironmentMode = uiState.selectedEnvironmentMode,
+                        onEnvironmentModeSelected = viewModel::selectEnvironmentMode,
                         onSaveClick = onRequestSave
                     )
                 } else {
@@ -382,6 +438,9 @@ private fun EmptyHomeContent(
     isCompactHeight: Boolean,
     circleDiameter: Dp,
     horizontalPadding: Dp,
+    liveGpsAccuracyM: Float?,
+    selectedEnvironmentMode: ParkingEnvironmentMode,
+    onEnvironmentModeSelected: (ParkingEnvironmentMode) -> Unit,
     onSaveClick: () -> Unit
 ) {
     Column(
@@ -393,8 +452,23 @@ private fun EmptyHomeContent(
         verticalArrangement = if (isCompactHeight) Arrangement.Center else Arrangement.Bottom
     ) {
         if (!isCompactHeight) {
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(0.32f))
         }
+
+        EnvironmentStatusPill(gpsAccuracyM = liveGpsAccuracyM)
+
+        if (!isCompactHeight) {
+            Spacer(modifier = Modifier.weight(0.68f))
+        } else {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        ParkingModeSegmentedSelector(
+            selectedMode = selectedEnvironmentMode,
+            onModeSelected = onEnvironmentModeSelected
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         SaveCarCircleButton(
             diameter = circleDiameter,
@@ -410,7 +484,112 @@ private fun EmptyHomeContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(if (isCompactHeight) 16.dp else 56.dp))
+        Spacer(modifier = Modifier.height(if (isCompactHeight) 16.dp else 44.dp))
+    }
+}
+
+@Composable
+private fun EnvironmentStatusPill(gpsAccuracyM: Float?) {
+    val isStrongGps = gpsAccuracyM != null && gpsAccuracyM <= 20f
+    val dotColor = if (isStrongGps) MaterialTheme.colorScheme.primary else WarningAmber
+    val label = if (isStrongGps) {
+        stringResource(R.string.home_env_gps_strong, gpsAccuracyM!!.roundToInt())
+    } else {
+        stringResource(R.string.home_env_gps_weak)
+    }
+
+    Surface(
+        shape = CircleShape,
+        color = Color(0xFF161B22).copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(dotColor)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun ParkingModeSegmentedSelector(
+    selectedMode: ParkingEnvironmentMode,
+    onModeSelected: (ParkingEnvironmentMode) -> Unit
+) {
+    val options = listOf(
+        ParkingEnvironmentMode.AUTO to stringResource(R.string.home_mode_auto),
+        ParkingEnvironmentMode.UNDERGROUND to stringResource(R.string.home_mode_underground),
+        ParkingEnvironmentMode.OUTDOOR to stringResource(R.string.home_mode_outdoor)
+    )
+
+    Surface(
+        shape = CircleShape,
+        color = Color(0xFF161B22).copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            options.forEach { (mode, label) ->
+                val selected = mode == selectedMode
+                val bgColor by animateColorAsState(
+                    targetValue = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.Transparent
+                    },
+                    animationSpec = tween(durationMillis = 200),
+                    label = "mode_bg"
+                )
+                val textColor by animateColorAsState(
+                    targetValue = if (selected) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    animationSpec = tween(durationMillis = 200),
+                    label = "mode_fg"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clip(CircleShape)
+                        .background(bgColor)
+                        .clickable { onModeSelected(mode) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        color = textColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -425,46 +604,71 @@ private fun SaveCarCircleButton(
     val buttonCd = stringResource(R.string.home_empty_hint)
 
     Box(
-        modifier = Modifier
-            .size(diameter)
-            .clip(CircleShape)
-            .background(surface)
-            .semantics { contentDescription = buttonCd }
-            .clickable(enabled = !isSaving, onClick = onClick),
+        modifier = Modifier.size(diameter),
         contentAlignment = Alignment.Center
     ) {
+        // Subtle concentric radar rings radiating into the tall center canvas
         Canvas(modifier = Modifier.fillMaxSize()) {
+            val baseRadius = size.minDimension / 2f
             drawCircle(
-                color = accent.copy(alpha = 0.22f),
-                radius = size.minDimension / 2f - 4.dp.toPx(),
+                color = accent.copy(alpha = 0.11f),
+                radius = baseRadius + 16.dp.toPx(),
                 style = Stroke(width = 1.dp.toPx())
             )
             drawCircle(
-                color = accent,
-                radius = size.minDimension / 2f - 12.dp.toPx(),
-                style = Stroke(width = 1.8.dp.toPx())
+                color = accent.copy(alpha = 0.06f),
+                radius = baseRadius + 34.dp.toPx(),
+                style = Stroke(width = 1.dp.toPx())
+            )
+            drawCircle(
+                color = accent.copy(alpha = 0.03f),
+                radius = baseRadius + 54.dp.toPx(),
+                style = Stroke(width = 1.dp.toPx())
             )
         }
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (isSaving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(28.dp),
+        Box(
+            modifier = Modifier
+                .size(diameter)
+                .clip(CircleShape)
+                .background(surface)
+                .semantics { contentDescription = buttonCd }
+                .clickable(enabled = !isSaving, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    color = accent.copy(alpha = 0.22f),
+                    radius = size.minDimension / 2f - 4.dp.toPx(),
+                    style = Stroke(width = 1.dp.toPx())
+                )
+                drawCircle(
                     color = accent,
-                    strokeWidth = 2.dp
+                    radius = size.minDimension / 2f - 12.dp.toPx(),
+                    style = Stroke(width = 1.8.dp.toPx())
                 )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = stringResource(R.string.home_saving_car),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = accent
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.home_save_car),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        color = accent,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(R.string.home_saving_car),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accent
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.home_save_car),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }

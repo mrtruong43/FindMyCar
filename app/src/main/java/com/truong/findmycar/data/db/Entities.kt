@@ -33,7 +33,8 @@ data class ParkingSpotEntity(
     val anchorLat: Double? = null,
     val anchorLon: Double? = null,
     val anchorPressureHpa: Float? = null,
-    val anchorRelHeightM: Float? = null
+    val anchorRelHeightM: Float? = null,
+    val environmentMode: String = "AUTO"
 )
 
 @Entity(

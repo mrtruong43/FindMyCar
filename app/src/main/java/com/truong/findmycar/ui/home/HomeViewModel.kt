@@ -7,6 +7,7 @@ import com.truong.findmycar.data.ParkingRepository
 import com.truong.findmycar.data.SettingsStore
 import com.truong.findmycar.data.db.ParkingSpotEntity
 import com.truong.findmycar.detect.ParkingDetector
+import com.truong.findmycar.detect.ParkingEnvironmentMode
 import com.truong.findmycar.detect.SaveSpotResult
 import com.truong.findmycar.tracking.TrackingStateHolder
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -26,7 +27,8 @@ data class HomeUiState(
     val trackingElapsedSeconds: Long = 0L,
     val stepCount: Int = 0,
     val autoDetectEnabled: Boolean = true,
-    val barometerNoticeShown: Boolean = false
+    val barometerNoticeShown: Boolean = false,
+    val selectedEnvironmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO
 )
 
 class HomeViewModel(
@@ -36,6 +38,7 @@ class HomeViewModel(
 ) : ViewModel() {
 
     private val isSavingFlow = MutableStateFlow(false)
+    private val selectedEnvironmentModeFlow = MutableStateFlow(ParkingEnvironmentMode.AUTO)
 
     val uiState: StateFlow<HomeUiState> = combine(
         repository.activeSpot,
@@ -43,7 +46,8 @@ class HomeViewModel(
         TrackingStateHolder.isTracking,
         TrackingStateHolder.elapsedSeconds,
         TrackingStateHolder.telemetry,
-        settingsStore.settings
+        settingsStore.settings,
+        selectedEnvironmentModeFlow
     ) { values ->
         val spot = values[0] as ParkingSpotEntity?
         val isSaving = values[1] as Boolean
@@ -51,6 +55,7 @@ class HomeViewModel(
         val elapsedSec = values[3] as Long
         val telemetry = values[4] as com.truong.findmycar.tracking.TrackingTelemetry
         val settings = values[5] as com.truong.findmycar.data.AppSettings
+        val selectedMode = values[6] as ParkingEnvironmentMode
         HomeUiState(
             activeSpot = spot,
             isSaving = isSaving,
@@ -58,7 +63,8 @@ class HomeViewModel(
             trackingElapsedSeconds = elapsedSec,
             stepCount = telemetry.stepCount,
             autoDetectEnabled = settings.autoDetectEnabled,
-            barometerNoticeShown = settings.barometerNoticeShown
+            barometerNoticeShown = settings.barometerNoticeShown,
+            selectedEnvironmentMode = selectedMode
         )
     }.stateIn(
         scope = viewModelScope,
@@ -72,12 +78,20 @@ class HomeViewModel(
     private val _anchorActionMessageRes = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     val anchorActionMessageRes: SharedFlow<Int> = _anchorActionMessageRes.asSharedFlow()
 
+    fun selectEnvironmentMode(mode: ParkingEnvironmentMode) {
+        selectedEnvironmentModeFlow.value = mode
+    }
+
     fun saveManualSpot() {
         if (isSavingFlow.value) return
         viewModelScope.launch {
             isSavingFlow.value = true
             try {
-                val result = parkingDetector.saveManualSpot()
+                val mode = selectedEnvironmentModeFlow.value
+                val result = parkingDetector.saveManualSpot(environmentMode = mode)
+                if (!result.skippedDuplicate) {
+                    selectedEnvironmentModeFlow.value = ParkingEnvironmentMode.AUTO
+                }
                 _saveEvents.tryEmit(result)
             } finally {
                 isSavingFlow.value = false

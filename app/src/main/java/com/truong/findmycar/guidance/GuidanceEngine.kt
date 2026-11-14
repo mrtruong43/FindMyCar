@@ -1,5 +1,6 @@
 package com.truong.findmycar.guidance
 
+import com.truong.findmycar.detect.ParkingEnvironmentMode
 import com.truong.findmycar.tracking.PathModel
 import com.truong.findmycar.tracking.PathPoint
 import com.truong.findmycar.tracking.PressureAltimeter
@@ -27,7 +28,8 @@ data class GuidanceTargetInfo(
     val floorHeightM: Float = 3.2f,
     val hasBarometer: Boolean = true,
     val carAccuracyM: Float? = null,
-    val anchorSet: Boolean = false
+    val anchorSet: Boolean = false,
+    val environmentMode: ParkingEnvironmentMode = ParkingEnvironmentMode.AUTO
 )
 
 data class GuidanceState(
@@ -59,12 +61,16 @@ class GuidanceEngine(
     private val totalPolylineLengthM: Float =
         if (hasFootprint) PathModel.totalLengthMeters(reversedPolyline) else 0f
 
-    private val isOutdoorSpot: Boolean =
-        info.carLat != null &&
-            info.carLon != null &&
-            info.carAccuracyM != null &&
-            info.carAccuracyM <= OUTDOOR_ORIGIN_ACCURACY_M &&
-            abs(info.anchorRelHeightM ?: 0f) < OUTDOOR_MAX_REL_HEIGHT_M
+    private val isOutdoorSpot: Boolean = when (info.environmentMode) {
+        ParkingEnvironmentMode.OUTDOOR -> info.carLat != null && info.carLon != null
+        ParkingEnvironmentMode.UNDERGROUND -> false
+        ParkingEnvironmentMode.AUTO ->
+            info.carLat != null &&
+                info.carLon != null &&
+                info.carAccuracyM != null &&
+                info.carAccuracyM <= OUTDOOR_ORIGIN_ACCURACY_M &&
+                abs(info.anchorRelHeightM ?: 0f) < OUTDOOR_MAX_REL_HEIGHT_M
+    }
 
     private val targetGpsLat: Double? = if (isOutdoorSpot) info.carLat else (info.anchorLat ?: info.carLat)
     private val targetGpsLon: Double? = if (isOutdoorSpot) info.carLon else (info.anchorLon ?: info.carLon)
