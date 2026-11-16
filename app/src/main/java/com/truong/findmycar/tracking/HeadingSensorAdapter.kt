@@ -162,7 +162,7 @@ class HeadingSensorAdapter(
                 SensorManager.remapCoordinateSystem(
                     rotationMatrix,
                     SensorManager.AXIS_X,
-                    SensorManager.AXIS_Z,
+                    SensorManager.AXIS_MINUS_Z,
                     remappedMatrix
                 )
                 SensorManager.getOrientation(remappedMatrix, orientationOut)

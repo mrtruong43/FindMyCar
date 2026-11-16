@@ -314,4 +314,37 @@ class GuidanceEngineTest {
         val jumpedState = engine.onGpsUpdate(carLat + 0.000045, carLon, accuracyM = 6f)
         assertEquals(0f, jumpedState.relativeArrowDeg, 2f)
     }
+
+    @Test
+    fun phase2ReturnTurnDirectionIsLeftAfterOutboundRightTurn() {
+        // Outbound: walk North 10m to (0, 10), then turn Right (East 90°) 10m to (10, 10)
+        val engine = GuidanceEngine(
+            GuidanceTargetInfo(
+                carLat = null,
+                carLon = null,
+                anchorLat = null,
+                anchorLon = null,
+                anchorRelHeightM = null,
+                footprint = listOf(
+                    PathPoint(0f, 0f),
+                    PathPoint(0f, 10f),
+                    PathPoint(10f, 10f)
+                )
+            )
+        )
+
+        // Return Phase 2: start at (10, 10), face West (270°) and walk 10m to corner (0, 10)
+        engine.onAzimuthUpdate(270f)
+        repeat(10) {
+            engine.onStep(1.0f)
+        }
+        // Settle arrow filter at corner facing West (270°); target toward (0, 0) is South (180°)
+        repeat(15) {
+            engine.onAzimuthUpdate(270f)
+        }
+
+        val cornerState = engine.currentState()
+        // From West (270°) to South (180°) is a Left turn (-90°), never Right (+90°)
+        assertEquals(-90f, cornerState.relativeArrowDeg, 5f)
+    }
 }

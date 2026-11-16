@@ -23,7 +23,6 @@ import com.truong.findmycar.data.ParkingRepository
 import com.truong.findmycar.data.SettingsStore
 import com.truong.findmycar.data.VehicleHologramType
 import com.truong.findmycar.data.db.ParkingSpotEntity
-import com.truong.findmycar.guidance.CircularFilter
 import com.truong.findmycar.guidance.GuidanceEngine
 import com.truong.findmycar.guidance.GuidancePhase
 import com.truong.findmycar.guidance.GuidanceState
@@ -84,7 +83,6 @@ class FindCarViewModel(
     private val rotationMatrix = FloatArray(9)
     private val remappedMatrix = FloatArray(9)
     private val orientation = FloatArray(3)
-    private val azimuthFilter = CircularFilter(alpha = 0.30f)
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
@@ -94,15 +92,14 @@ class FindCarViewModel(
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
                     SensorManager.getOrientation(rotationMatrix, orientation)
                     val pitchDeg = Math.toDegrees(orientation[1].toDouble()).toFloat()
-                    val rawAzimuthDeg = HeadingSensorAdapter.computeTiltCompensatedAzimuthDeg(
+                    val azimuthDeg = HeadingSensorAdapter.computeTiltCompensatedAzimuthDeg(
                         rotationMatrix = rotationMatrix,
                         remappedMatrix = remappedMatrix,
                         orientationOut = orientation,
                         pitchDeg = pitchDeg
                     )
-                    val filteredAzimuthDeg = azimuthFilter.update(rawAzimuthDeg)
-                    _uiState.value = _uiState.value.copy(userHeadingDeg = filteredAzimuthDeg)
-                    updateGuidanceState(g.onAzimuthUpdate(filteredAzimuthDeg))
+                    _uiState.value = _uiState.value.copy(userHeadingDeg = azimuthDeg)
+                    updateGuidanceState(g.onAzimuthUpdate(azimuthDeg))
                 }
                 Sensor.TYPE_STEP_DETECTOR -> {
                     updateGuidanceState(g.onStep(stepLengthM))
