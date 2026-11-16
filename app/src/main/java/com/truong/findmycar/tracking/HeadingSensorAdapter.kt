@@ -7,6 +7,8 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import com.truong.findmycar.util.GeoMath
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.sqrt
 
 enum class HeadingMode {
     HAND_HELD,
@@ -21,9 +23,9 @@ data class HeadingSensorSnapshot(
 
 /**
  * Android SensorManager adapter for M4A's pure Kotlin [HeadingEstimator].
- * - Mode A (Hand-held): TYPE_ROTATION_VECTOR -> getRotationMatrixFromVector -> getOrientation.
- * - Mode B (In-pocket): TYPE_LINEAR_ACCELERATION rotated to world frame -> 2s PCA.
- * - Adaptive sampling: throttles to SENSOR_DELAY_NORMAL when stationary, restores SENSOR_DELAY_GAME on step.
+ * - Mode A (Hand-held / Relaxed): 3x3 rotationMatrix vector projection (-Z upright, +Y flat/side-edge)
+ *   with adaptive filtering, phone-call proximity hold, and basement steel magnetic spike guard.
+ * - Mode B (In-pocket): TYPE_LINEAR_ACCELERATION rotated to world frame -> 2.5s PCA.
  */
 class HeadingSensorAdapter(
     context: Context,
@@ -32,16 +34,17 @@ class HeadingSensorAdapter(
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val rotationSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private val linearAccelSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+    private val proximitySensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+    private val magneticSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
     private val estimator = HeadingEstimator()
     private val rotationMatrix = FloatArray(9)
-    private val remappedMatrix = FloatArray(9)
-    private val orientationAngles = FloatArray(3)
 
     private var hasRotationMatrix = false
-    private var latestAzimuthDeg = 0f
-    private var latestPitchDeg = 0f
-    private var latestRollDeg = 0f
+    private var latestTopUp = 0f
+    private var lastValidHandHeldHeading: Float? = null
+    private var isProximityCovered = false
+    private var hasMagneticInterference = false
     private var registered = false
     private var lowPowerMode = false
 
@@ -54,20 +57,33 @@ class HeadingSensorAdapter(
             when (event.sensor.type) {
                 Sensor.TYPE_ROTATION_VECTOR -> {
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    SensorManager.getOrientation(rotationMatrix, orientationAngles)
                     hasRotationMatrix = true
+                    latestTopUp = rotationMatrix[7]
 
-                    latestPitchDeg = Math.toDegrees(orientationAngles[1].toDouble()).toFloat()
-                    latestRollDeg = Math.toDegrees(orientationAngles[2].toDouble()).toFloat()
-                    latestAzimuthDeg = computeTiltCompensatedAzimuthDeg(
-                        rotationMatrix = rotationMatrix,
-                        remappedMatrix = remappedMatrix,
-                        orientationOut = orientationAngles,
-                        pitchDeg = latestPitchDeg
-                    )
+                    if (isProximityCovered) {
+                        // Phone-call proximity hold: freeze last valid hand-held heading
+                        lastValidHandHeldHeading?.let { held ->
+                            updateSnapshot(
+                                HeadingSensorSnapshot(
+                                    headingDeg = held,
+                                    mode = HeadingMode.HAND_HELD,
+                                    pcaRatio = currentSnapshot.pcaRatio
+                                )
+                            )
+                        }
+                        return
+                    }
+
+                    val (azimuthDeg, postureBaseAlpha) = computeMultiPostureAzimuth(rotationMatrix)
+                    val effectiveBaseAlpha = if (hasMagneticInterference) {
+                        MAGNETIC_INTERFERENCE_ALPHA
+                    } else {
+                        postureBaseAlpha
+                    }
 
                     if (isHandHeldPosture()) {
-                        val est = estimator.updateHandHeldAzimuth(latestAzimuthDeg)
+                        val est = estimator.updateHandHeldAzimuth(azimuthDeg, effectiveBaseAlpha)
+                        lastValidHandHeldHeading = est.headingDeg
                         updateSnapshot(
                             HeadingSensorSnapshot(
                                 headingDeg = est.headingDeg,
@@ -79,7 +95,7 @@ class HeadingSensorAdapter(
                 }
 
                 Sensor.TYPE_LINEAR_ACCELERATION -> {
-                    if (!hasRotationMatrix || event.values.size < 3) return
+                    if (!hasRotationMatrix || event.values.size < 3 || isProximityCovered) return
                     val lx = event.values[0]
                     val ly = event.values[1]
                     val lz = event.values[2]
@@ -99,8 +115,24 @@ class HeadingSensorAdapter(
                             )
                         )
                     } else if (pcaEstimate.isConfident) {
-                        // Keep PCA ratio visible for debug telemetry even in hand-held mode
                         currentSnapshot = currentSnapshot.copy(pcaRatio = pcaEstimate.eigenvalueRatio)
+                    }
+                }
+
+                Sensor.TYPE_PROXIMITY -> {
+                    val maxRange = proximitySensor?.maximumRange ?: 0f
+                    if (event.values.isNotEmpty() && maxRange > 0f) {
+                        isProximityCovered = event.values[0] < maxRange
+                    }
+                }
+
+                Sensor.TYPE_MAGNETIC_FIELD -> {
+                    if (event.values.size >= 3) {
+                        val bx = event.values[0]
+                        val by = event.values[1]
+                        val bz = event.values[2]
+                        val magUt = sqrt(bx * bx + by * by + bz * bz)
+                        hasMagneticInterference = magUt < MIN_NORMAL_MAG_UT || magUt > MAX_NORMAL_MAG_UT
                     }
                 }
             }
@@ -110,8 +142,8 @@ class HeadingSensorAdapter(
     }
 
     private fun isHandHeldPosture(): Boolean {
-        // Hand-held posture: phone tilted 5°..88° (flat to upright) and roll < 45°
-        return abs(latestPitchDeg) in 5f..88f && abs(latestRollDeg) < 45f
+        // Allows natural arm back-swing while walking (topUp >= -0.50f)
+        return latestTopUp >= -0.50f
     }
 
     private fun updateSnapshot(snapshot: HeadingSensorSnapshot) {
@@ -136,7 +168,12 @@ class HeadingSensorAdapter(
     private fun registerWithDelay(delayUs: Int) {
         rotationSensor?.let { sensorManager.registerListener(listener, it, delayUs) }
         linearAccelSensor?.let { sensorManager.registerListener(listener, it, delayUs) }
-        registered = rotationSensor != null || linearAccelSensor != null
+        proximitySensor?.let { sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        magneticSensor?.let { sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        registered = rotationSensor != null ||
+            linearAccelSensor != null ||
+            proximitySensor != null ||
+            magneticSensor != null
     }
 
     fun stop() {
@@ -146,30 +183,39 @@ class HeadingSensorAdapter(
     }
 
     companion object {
+        const val UPRIGHT_TOP_UP_THRESHOLD = 0.707f
+        const val UPRIGHT_BASE_ALPHA = 0.35f
+        const val FLAT_OR_SIDE_BASE_ALPHA = 0.18f
+        const val MAGNETIC_INTERFERENCE_ALPHA = 0.08f
+        const val MIN_NORMAL_MAG_UT = 20f
+        const val MAX_NORMAL_MAG_UT = 85f
+
         /**
-         * Computes tilt-compensated forward azimuth from [rotationMatrix].
-         * When held upright (|pitch| > 45°), remaps the coordinate system so the
-         * camera's -Z viewing axis projects cleanly onto the horizontal world plane,
-         * preventing gimbal-lock flips up to 88°.
+         * Computes forward horizontal azimuth directly from the 3x3 world [rotationMatrix]
+         * (row 0 = East, row 1 = North, row 2 = Up):
+         * - Upright viewing (> 45°, |topUp| > 0.707): projects rear camera (-Z) -> (-R[2], -R[5]).
+         * - Flat or relaxed arm-at-side (side-edge down): projects top edge (+Y) -> (R[1], R[4]).
+         *
+         * @return Pair(azimuthDeg, recommendedBaseAlpha)
          */
-        fun computeTiltCompensatedAzimuthDeg(
-            rotationMatrix: FloatArray,
-            remappedMatrix: FloatArray,
-            orientationOut: FloatArray,
-            pitchDeg: Float
-        ): Float {
-            if (abs(pitchDeg) > 45f) {
-                SensorManager.remapCoordinateSystem(
-                    rotationMatrix,
-                    SensorManager.AXIS_X,
-                    SensorManager.AXIS_MINUS_Z,
-                    remappedMatrix
-                )
-                SensorManager.getOrientation(remappedMatrix, orientationOut)
+        fun computeMultiPostureAzimuth(rotationMatrix: FloatArray): Pair<Float, Float> {
+            val topUp = rotationMatrix[7]
+            val east: Float
+            val north: Float
+            val baseAlpha: Float
+            if (abs(topUp) > UPRIGHT_TOP_UP_THRESHOLD) {
+                east = -rotationMatrix[2]
+                north = -rotationMatrix[5]
+                baseAlpha = UPRIGHT_BASE_ALPHA
+            } else {
+                east = rotationMatrix[1]
+                north = rotationMatrix[4]
+                baseAlpha = FLAT_OR_SIDE_BASE_ALPHA
             }
-            return GeoMath.normalizeAngleDegrees(
-                Math.toDegrees(orientationOut[0].toDouble()).toFloat()
+            val azimuthDeg = GeoMath.normalizeAngleDegrees(
+                Math.toDegrees(atan2(east.toDouble(), north.toDouble())).toFloat()
             )
+            return azimuthDeg to baseAlpha
         }
     }
 }

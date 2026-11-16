@@ -13,7 +13,7 @@
   - Room `2.7.2`, DataStore Preferences `1.1.7`, Navigation Compose `2.9.0`, Google Play Services Location `21.3.0`.
   - **Lưu ý build CLI:** Cần trỏ `JAVA_HOME` tới JDK 17 (`C:\Users\Thu\AppData\Local\Programs\openjdk-17\jdk-17.0.19+10`).
 - **File APK hiện tại:** `findmycar-debug.apk` (`13,521,260` bytes / ~12.89 MB).
-- **Unit test:** 33/33 test pass trên JVM (không phụ thuộc thiết bị Android).
+- **Unit test:** 35/35 test pass trên JVM (không phụ thuộc thiết bị Android).
 
 ---
 
@@ -36,14 +36,14 @@ app/src/main/java/com/truong/findmycar/
 │   ├── ParkingEnvironmentMode.kt     # Thuần Kotlin: 3 chế độ AUTO / UNDERGROUND / OUTDOOR & resolver
 │   └── ParkingDetector.kt            # Lưu thủ công (theo 3 chế độ) & tự động, LocationUpdates khi lái xe, barometer 2s, notification
 ├── guidance/
-│   ├── CircularFilter.kt           # Thuần Kotlin: lọc thông thấp góc trên sin/cos
+│   ├── CircularFilter.kt           # Thuần Kotlin: lọc thông thấp góc sin/cos + updateAdaptive() (lọc nhiễu bước đi <12°, tăng alpha 0.45f khi rẽ >35°)
 │   └── GuidanceEngine.kt           # Thuần Kotlin: điều hướng 2 pha, khóa targetBearingDeg vùng gần (<=4m Phase 2 / <=7m Phase 1), chống jitter <3m, lọc tầng
 ├── tracking/
-│   ├── HeadingEstimator.kt         # Thuần Kotlin: Mode A + Mode B (PCA 2x2)
+│   ├── HeadingEstimator.kt         # Thuần Kotlin: Mode A (updateAdaptive) + Mode B (PCA 2x2, cửa sổ 2.5s, minEigenRatio 2.5f)
 │   ├── PressureAltimeter.kt        # Thuần Kotlin: trung bình trượt 1.5s + lọc thông thấp
 │   ├── PathModel.kt                # Thuần Kotlin: bước đi, đảo đường, chiếu polyline, lookahead
 │   ├── StepTracker.kt              # SensorAdapter: TYPE_STEP_DETECTOR (batching 1s)
-│   ├── HeadingSensorAdapter.kt     # SensorAdapter: TYPE_ROTATION_VECTOR + TYPE_LINEAR_ACCELERATION, bù nghiêng (remapCoordinateSystem |pitch|>45° tới 88°), isHandHeldPosture (5°..88°)
+│   ├── HeadingSensorAdapter.kt     # SensorAdapter: chiếu vector đa tư thế (-Z dựng đứng / +Y phẳng-nghiêng cạnh), giữ hướng khi nghe điện thoại (TYPE_PROXIMITY), lọc nhiễu từ thép hầm (TYPE_MAGNETIC_FIELD), vung tay >= -0.50f
 │   ├── PressureSensorAdapter.kt    # SensorAdapter: TYPE_PRESSURE
 │   ├── TrackingStateHolder.kt      # StateFlow: telemetry realtime + bộ đệm log CSV
 │   └── TrackingService.kt          # Foreground Service: ghi dấu chân theo lô, nút thông báo "Chốt lối ra / thang máy", bộ lọc neo hầm 3 lớp, ghi tiếp dấu chân
@@ -92,4 +92,6 @@ app/src/main/java/com/truong/findmycar/
   - Màn hình **Đã lưu / Đang ghi (`PARKED_LOCKED`)**: khóa thao tác kéo xoay để tránh xung đột với chip chọn tầng (`B3`, `B2`, `B1`, `Trệt`, `Tầng 2`), ô ghi chú cột và nút Camera tích hợp ngay trong `CarIdentityBentoCard`.
   - Màn hình **Tìm xe (`GUIDING_TO_VEHICLE`)**: thay mũi tên phẳng bằng mô hình 3D xoay 60fps theo góc tương đối + vành la bàn `B / Đ / N / T` xoay theo hướng máy, zoom `1.15x` + sóng xung kích hướng tâm khi `< 10m`.
 - **Xác nhận hoàn tất chuyến đi (`TripCompletedOverlay.kt`):** Hiển thị khi nhấn `"Đã tìm thấy xe"` hoặc `"Đã lấy xe"`, gồm dấu tích nảy spring, vòng radar, tóm tắt thời gian gửi & ghi chú, tự đóng sau 2,5 giây.
-- **Ổn định la bàn & cảm biến (`GuidanceEngine.kt`, `HeadingSensorAdapter.kt`, `FindCarViewModel.kt`):** Khóa `targetBearingDeg` trong vùng gần (`<= 4.0m` Phase 2, `<= 7.0m` Phase 1 ngoài trời) tránh lật 180°, bù nghiêng `remapCoordinateSystem` khi cầm máy dựng đứng (`45°..88°`), lọc góc phương vị bằng `CircularFilter(alpha = 0.30f)`.
+- **Ổn định la bàn & cảm biến đa tư thế (`CircularFilter.kt`, `HeadingEstimator.kt`, `HeadingSensorAdapter.kt`, `GuidanceEngine.kt`, `FindCarViewModel.kt`):**
+  - Chiếu trực tiếp vector hướng từ `rotationMatrix` (`-Z` khi cầm dựng đứng `|topUp| > 0.707f`, `+Y` khi đặt phẳng hoặc buông tay cạnh bên), giữ nguyên hướng khi nghe điện thoại (`TYPE_PROXIMITY`), siết lọc khi nhiễu từ thép hầm (`TYPE_MAGNETIC_FIELD` ngoài `20..85 µT`), và cho phép vung tay tự nhiên (`topUp >= -0.50f`).
+  - Bộ lọc thích ứng `CircularFilter.updateAdaptive()` (chống rung khi đi thẳng, phản hồi nhanh `0.45f` khi rẽ góc `> 35°`), siết `HeadingEstimator` PCA (`2.5s`, `minEigenRatio = 2.5f`), loại bỏ lọc kép ở `FindCarViewModel`, và khóa `targetBearingDeg` trong vùng gần (`<= 4.0m` Phase 2, `<= 7.0m` Phase 1 ngoài trời).

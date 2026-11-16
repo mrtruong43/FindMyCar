@@ -81,8 +81,6 @@ class FindCarViewModel(
     private var wasVeryClose = false
 
     private val rotationMatrix = FloatArray(9)
-    private val remappedMatrix = FloatArray(9)
-    private val orientation = FloatArray(3)
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
@@ -90,14 +88,7 @@ class FindCarViewModel(
             when (event.sensor.type) {
                 Sensor.TYPE_ROTATION_VECTOR -> {
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    SensorManager.getOrientation(rotationMatrix, orientation)
-                    val pitchDeg = Math.toDegrees(orientation[1].toDouble()).toFloat()
-                    val azimuthDeg = HeadingSensorAdapter.computeTiltCompensatedAzimuthDeg(
-                        rotationMatrix = rotationMatrix,
-                        remappedMatrix = remappedMatrix,
-                        orientationOut = orientation,
-                        pitchDeg = pitchDeg
-                    )
+                    val (azimuthDeg, _) = HeadingSensorAdapter.computeMultiPostureAzimuth(rotationMatrix)
                     _uiState.value = _uiState.value.copy(userHeadingDeg = azimuthDeg)
                     updateGuidanceState(g.onAzimuthUpdate(azimuthDeg))
                 }

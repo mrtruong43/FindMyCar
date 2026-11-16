@@ -36,4 +36,18 @@ class CircularFilterTest {
             prev = next
         }
     }
+
+    @Test
+    fun adaptiveFilterDampsSmallSwayAndRespondsFastToTurns() {
+        val filter = CircularFilter(alpha = 0.18f)
+        filter.updateAdaptive(0f, baseAlpha = 0.18f)
+
+        // Small walking sway (+5° < 12°) uses baseAlpha=0.18 -> moves < 1.5° in one step
+        val afterSway = filter.updateAdaptive(5f, baseAlpha = 0.18f)
+        assertTrue("Expected damped sway < 1.5°, got $afterSway", afterSway < 1.5f)
+
+        // True corner turn (+90° > 35°) boosts effective alpha to 0.45 -> jumps > 35° in one step
+        val afterTurn = filter.updateAdaptive(90f, baseAlpha = 0.18f)
+        assertTrue("Expected fast turn response > 35°, got $afterTurn", afterTurn > 35f)
+    }
 }

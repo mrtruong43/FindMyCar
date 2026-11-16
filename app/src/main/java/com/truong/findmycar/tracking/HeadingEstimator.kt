@@ -36,8 +36,11 @@ class HeadingEstimator(
     private var lastValidHeadingDeg: Float = 0f
     private var hasValidHeading: Boolean = false
 
-    fun updateHandHeldAzimuth(azimuthDeg: Float): HeadingEstimate {
-        val filtered = circularFilter.update(azimuthDeg)
+    fun updateHandHeldAzimuth(
+        azimuthDeg: Float,
+        baseAlpha: Float = CircularFilter.DEFAULT_ALPHA
+    ): HeadingEstimate {
+        val filtered = circularFilter.updateAdaptive(azimuthDeg, baseAlpha)
         lastValidHeadingDeg = filtered
         hasValidHeading = true
         return HeadingEstimate(
@@ -189,8 +192,8 @@ class HeadingEstimator(
     }
 
     companion object {
-        const val DEFAULT_WINDOW_MS = 2_000L
-        const val DEFAULT_MIN_EIGEN_RATIO = 2.0f
+        const val DEFAULT_WINDOW_MS = 2_500L
+        const val DEFAULT_MIN_EIGEN_RATIO = 2.5f
         const val DEFAULT_MIN_VARIANCE = 1e-3
         const val MIN_SAMPLES = 8
     }
