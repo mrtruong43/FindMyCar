@@ -36,10 +36,8 @@ class FindMyCarApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         appScope.launch {
-            val autoDetect = container.settingsStore.settings.first().autoDetectEnabled
-            if (autoDetect && Permissions.hasActivityRecognition(this@FindMyCarApp)) {
-                ActivityTransitionManager.register(this@FindMyCarApp)
-            }
+            // Manual-only parking: ensure any previously registered ActivityTransition updates are removed
+            ActivityTransitionManager.unregister(this@FindMyCarApp)
         }
     }
 }

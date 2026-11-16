@@ -183,12 +183,6 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     SettingsSwitchRow(
-                        title = stringResource(R.string.settings_auto_detect),
-                        subtitle = stringResource(R.string.settings_auto_detect_desc),
-                        checked = settings.autoDetectEnabled,
-                        onCheckedChange = viewModel::setAutoDetectEnabled
-                    )
-                    SettingsSwitchRow(
                         title = stringResource(R.string.settings_haptic),
                         subtitle = stringResource(R.string.settings_haptic_desc),
                         checked = settings.hapticFeedbackEnabled,

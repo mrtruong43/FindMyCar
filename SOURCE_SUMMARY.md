@@ -12,8 +12,8 @@
   - Jetpack Compose (Material 3, Dark Mode mặc định `#0B0F14`, Bento Surface `#131A22`, màu nhấn `#2EE6A6`, cảnh báo/hầm `#FFB020`).
   - Room `2.7.2`, DataStore Preferences `1.1.7`, Navigation Compose `2.9.0`, Google Play Services Location `21.3.0`.
   - **Lưu ý build CLI:** Cần trỏ `JAVA_HOME` tới JDK 17 (`C:\Users\Thu\AppData\Local\Programs\openjdk-17\jdk-17.0.19+10`).
-- **File APK hiện tại:** `findmycar-debug.apk` (`13,521,260` bytes / ~12.89 MB).
-- **Unit test:** 35/35 test pass trên JVM (không phụ thuộc thiết bị Android).
+- **File APK hiện tại:** `findmycar-debug.apk` (`13,522,568` bytes / ~12.90 MB).
+- **Unit test:** 39/39 test pass trên JVM (không phụ thuộc thiết bị Android).
 
 ---
 
@@ -37,13 +37,16 @@ app/src/main/java/com/truong/findmycar/
 │   └── ParkingDetector.kt            # Lưu thủ công (theo 3 chế độ) & tự động, LocationUpdates khi lái xe, barometer 2s, notification
 ├── guidance/
 │   ├── CircularFilter.kt           # Thuần Kotlin: lọc thông thấp góc sin/cos + updateAdaptive() (lọc nhiễu bước đi <12°, tăng alpha 0.45f khi rẽ >35°)
-│   └── GuidanceEngine.kt           # Thuần Kotlin: điều hướng 2 pha, khóa targetBearingDeg vùng gần (<=4m Phase 2 / <=7m Phase 1), chống jitter <3m, lọc tầng
+│   ├── ConfidenceEstimator.kt      # Thuần Kotlin: ước lượng độ tin cậy [0..1] với hysteresis (>0.70 HIGH, <0.40 LOW) theo quãng đường, số lần rẽ, nhiễu từ
+│   └── GuidanceEngine.kt           # Thuần Kotlin: điều hướng 2 pha, khóa targetBearingDeg vùng gần (<=4m Phase 2 / <=7m Phase 1), tích hợp ConfidenceEstimator
 ├── tracking/
 │   ├── HeadingEstimator.kt         # Thuần Kotlin: Mode A (updateAdaptive) + Mode B (PCA 2x2, cửa sổ 2.5s, minEigenRatio 2.5f)
+│   ├── OrientationFusion.kt        # Thuần Kotlin: trộn TYPE_GAME_ROTATION_VECTOR (gyro) + TYPE_ROTATION_VECTOR (Bắc thật), ngắt từ kế khi nhiễu thép/rẽ nhanh
+│   ├── ReplayHarness.kt            # Thuần Kotlin (Phase 0): phát lại log CSV từ DebugScreen trong JUnit để đo sai số cuối tuyến
 │   ├── PressureAltimeter.kt        # Thuần Kotlin: trung bình trượt 1.5s + lọc thông thấp
 │   ├── PathModel.kt                # Thuần Kotlin: bước đi, đảo đường, chiếu polyline, lookahead
 │   ├── StepTracker.kt              # SensorAdapter: TYPE_STEP_DETECTOR (batching 1s)
-│   ├── HeadingSensorAdapter.kt     # SensorAdapter: chiếu vector đa tư thế (-Z dựng đứng / +Y phẳng-nghiêng cạnh), giữ hướng khi nghe điện thoại (TYPE_PROXIMITY), lọc nhiễu từ thép hầm (TYPE_MAGNETIC_FIELD), vung tay >= -0.50f
+│   ├── HeadingSensorAdapter.kt     # SensorAdapter: TYPE_GAME_ROTATION_VECTOR + TYPE_ROTATION_VECTOR + OrientationFusion, chiếu đa tư thế, giữ hướng khi nghe ĐT, lọc nhiễu từ
 │   ├── PressureSensorAdapter.kt    # SensorAdapter: TYPE_PRESSURE
 │   ├── TrackingStateHolder.kt      # StateFlow: telemetry realtime + bộ đệm log CSV
 │   └── TrackingService.kt          # Foreground Service: ghi dấu chân theo lô, nút thông báo "Chốt lối ra / thang máy", bộ lọc neo hầm 3 lớp, ghi tiếp dấu chân
@@ -92,6 +95,10 @@ app/src/main/java/com/truong/findmycar/
   - Màn hình **Đã lưu / Đang ghi (`PARKED_LOCKED`)**: khóa thao tác kéo xoay để tránh xung đột với chip chọn tầng (`B3`, `B2`, `B1`, `Trệt`, `Tầng 2`), ô ghi chú cột và nút Camera tích hợp ngay trong `CarIdentityBentoCard`.
   - Màn hình **Tìm xe (`GUIDING_TO_VEHICLE`)**: thay mũi tên phẳng bằng mô hình 3D xoay 60fps theo góc tương đối + vành la bàn `B / Đ / N / T` xoay theo hướng máy, zoom `1.15x` + sóng xung kích hướng tâm khi `< 10m`.
 - **Xác nhận hoàn tất chuyến đi (`TripCompletedOverlay.kt`):** Hiển thị khi nhấn `"Đã tìm thấy xe"` hoặc `"Đã lấy xe"`, gồm dấu tích nảy spring, vòng radar, tóm tắt thời gian gửi & ghi chú, tự đóng sau 2,5 giây.
-- **Ổn định la bàn & cảm biến đa tư thế (`CircularFilter.kt`, `HeadingEstimator.kt`, `HeadingSensorAdapter.kt`, `GuidanceEngine.kt`, `FindCarViewModel.kt`):**
-  - Chiếu trực tiếp vector hướng từ `rotationMatrix` (`-Z` khi cầm dựng đứng `|topUp| > 0.707f`, `+Y` khi đặt phẳng hoặc buông tay cạnh bên), giữ nguyên hướng khi nghe điện thoại (`TYPE_PROXIMITY`), siết lọc khi nhiễu từ thép hầm (`TYPE_MAGNETIC_FIELD` ngoài `20..85 µT`), và cho phép vung tay tự nhiên (`topUp >= -0.50f`).
-  - Bộ lọc thích ứng `CircularFilter.updateAdaptive()` (chống rung khi đi thẳng, phản hồi nhanh `0.45f` khi rẽ góc `> 35°`), siết `HeadingEstimator` PCA (`2.5s`, `minEigenRatio = 2.5f`), loại bỏ lọc kép ở `FindCarViewModel`, và khóa `targetBearingDeg` trong vùng gần (`<= 4.0m` Phase 2, `<= 7.0m` Phase 1 ngoài trời).
+- **Ổn định la bàn & cảm biến đa tư thế (`CircularFilter.kt`, `HeadingEstimator.kt`, `OrientationFusion.kt`, `HeadingSensorAdapter.kt`, `GuidanceEngine.kt`, `FindCarViewModel.kt`):**
+  - Chiếu trực tiếp vector hướng từ `rotationMatrix` (`-Z` khi cầm dựng đứng `|topUp| > 0.707f`, `+Y` khi đặt phẳng hoặc buông tay cạnh bên), kết hợp `OrientationFusion` (`TYPE_GAME_ROTATION_VECTOR` miễn nhiễm thép hầm + bù trôi chậm khi từ trường sạch `20..85 µT`) cho cả chiều đi ra và tìm về.
+  - Bộ lọc thích ứng `CircularFilter.updateAdaptive()`, giữ hướng khi nghe điện thoại (`TYPE_PROXIMITY`), đóng băng PCA khi rẽ nhanh, và khóa `targetBearingDeg` trong vùng gần (`<= 4.0m` Phase 2, `<= 7.0m` Phase 1 ngoài trời).
+- **Replay Harness & Độ tin cậy (`ReplayHarness.kt`, `ConfidenceEstimator.kt`, `FindCarScreen.kt`):**
+  - Bộ phát lại CSV (`ReplayHarness`) chạy pipeline trong JUnit; `ConfidenceEstimator` chuyển sang chế độ dẫn đường thô (`"Khoảng X–Ym"`, làm mờ hologram 3D, ưu tiên tầng/ghi chú/ảnh) khi độ tin cậy `< 0.40` (hysteresis `0.40..0.70`).
+- **Ghi đỗ xe thủ công (`AndroidManifest.xml`, `FindMyCarApp.kt`, `HomeScreen.kt`, `SettingsScreen.kt`):**
+  - Bỏ chức năng tự động phát hiện đỗ xe (`IN_VEHICLE` / `ActivityTransitionReceiver` / `BootReceiver`); ứng dụng tập trung hoàn toàn vào luồng ghi thủ công từ lúc đỗ đến lúc tìm.

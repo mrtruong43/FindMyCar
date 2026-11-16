@@ -289,6 +289,11 @@
     <string name="trip_completed_duration_days">Thời gian gửi: %1$d ngày</string>
     <string name="trip_completed_done_button">Hoàn tất</string>
 
+    <!-- Coarse Guidance Mode (Low Confidence) -->
+    <string name="find_coarse_distance_range">Khoảng %1$d–%2$dm</string>
+    <string name="find_low_confidence_hint">Độ tin cậy thấp • Ưu tiên xem tầng, ghi chú &amp; ảnh</string>
+    <string name="home_manual_mode_label">Ghi thủ công</string>
+
     <!-- Placeholders for M6 -->
     <string name="placeholder_coming_soon">Tính năng đang được phát triển ở mốc tiếp theo.</string>
 </resources>

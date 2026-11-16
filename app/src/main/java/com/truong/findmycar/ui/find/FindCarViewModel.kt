@@ -28,6 +28,7 @@ import com.truong.findmycar.guidance.GuidancePhase
 import com.truong.findmycar.guidance.GuidanceState
 import com.truong.findmycar.guidance.GuidanceTargetInfo
 import com.truong.findmycar.tracking.HeadingSensorAdapter
+import com.truong.findmycar.tracking.OrientationFusion
 import com.truong.findmycar.tracking.PathPoint
 import com.truong.findmycar.tracking.TrackingService
 import com.truong.findmycar.util.GeoMath
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 data class FindCarUiState(
     val spot: ParkingSpotEntity? = null,
@@ -81,16 +83,50 @@ class FindCarViewModel(
     private var wasVeryClose = false
 
     private val rotationMatrix = FloatArray(9)
+    private val gameRotationMatrix = FloatArray(9)
+    private val orientationFusion = OrientationFusion()
+    private var hasGameRotationSensor = false
+    private var latestMagAzimuthDeg: Float? = null
+    private var hasMagneticInterference = false
 
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
             val g = engine ?: return
             when (event.sensor.type) {
+                Sensor.TYPE_GAME_ROTATION_VECTOR -> {
+                    SensorManager.getRotationMatrixFromVector(gameRotationMatrix, event.values)
+                    val (gameAzimuthDeg, _) = HeadingSensorAdapter.computeMultiPostureAzimuth(gameRotationMatrix)
+                    val fusedAzimuthDeg = orientationFusion.update(
+                        gameAzimuthDeg = gameAzimuthDeg,
+                        magAzimuthDeg = latestMagAzimuthDeg,
+                        hasMagneticInterference = hasMagneticInterference,
+                        timestampMs = System.currentTimeMillis()
+                    )
+                    _uiState.value = _uiState.value.copy(userHeadingDeg = fusedAzimuthDeg)
+                    updateGuidanceState(g.onAzimuthUpdate(fusedAzimuthDeg))
+                }
                 Sensor.TYPE_ROTATION_VECTOR -> {
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    val (azimuthDeg, _) = HeadingSensorAdapter.computeMultiPostureAzimuth(rotationMatrix)
-                    _uiState.value = _uiState.value.copy(userHeadingDeg = azimuthDeg)
-                    updateGuidanceState(g.onAzimuthUpdate(azimuthDeg))
+                    val (magAzimuthDeg, _) = HeadingSensorAdapter.computeMultiPostureAzimuth(rotationMatrix)
+                    latestMagAzimuthDeg = magAzimuthDeg
+                    if (!hasGameRotationSensor) {
+                        _uiState.value = _uiState.value.copy(userHeadingDeg = magAzimuthDeg)
+                        updateGuidanceState(g.onAzimuthUpdate(magAzimuthDeg))
+                    }
+                }
+                Sensor.TYPE_MAGNETIC_FIELD -> {
+                    if (event.values.size >= 3) {
+                        val bx = event.values[0]
+                        val by = event.values[1]
+                        val bz = event.values[2]
+                        val magUt = sqrt(bx * bx + by * by + bz * bz)
+                        val isSpike = magUt < HeadingSensorAdapter.MIN_NORMAL_MAG_UT ||
+                            magUt > HeadingSensorAdapter.MAX_NORMAL_MAG_UT
+                        if (isSpike && !hasMagneticInterference) {
+                            updateGuidanceState(g.onMagneticSpike())
+                        }
+                        hasMagneticInterference = isSpike
+                    }
                 }
                 Sensor.TYPE_STEP_DETECTOR -> {
                     updateGuidanceState(g.onStep(stepLengthM))
@@ -200,8 +236,16 @@ class FindCarViewModel(
     }
 
     private fun registerSensors() {
+        val gameSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+        hasGameRotationSensor = gameSensor != null
+        gameSensor?.let {
+            sensorManager.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI)
+        }
         sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)?.let {
             sensorManager.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI)
+        }
+        sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.let {
+            sensorManager.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_NORMAL)
         }
         sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)?.let {
             sensorManager.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_FASTEST)

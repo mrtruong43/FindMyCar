@@ -39,7 +39,9 @@ data class GuidanceState(
     val floorDeltaToTarget: Int? = null,
     val isCompassLowAccuracy: Boolean = false,
     val hasWeakGpsSignal: Boolean = false,
-    val canEnterPhase2Manually: Boolean = false
+    val canEnterPhase2Manually: Boolean = false,
+    val confidenceScore: Float = 1f,
+    val confidenceLevel: ConfidenceLevel = ConfidenceLevel.HIGH
 )
 
 /**
@@ -53,6 +55,7 @@ class GuidanceEngine(
     private val info: GuidanceTargetInfo
 ) {
     private val arrowFilter = CircularFilter(alpha = 0.45f)
+    private val confidenceEstimator = ConfidenceEstimator()
 
     private val hasFootprint = info.footprint.size >= 2
     private val reversedPolyline: List<PathPoint> =
@@ -118,6 +121,7 @@ class GuidanceEngine(
         val rawRelative = GeoMath.shortestAngleDeltaDegrees(latestAzimuthDeg, targetBearingDeg)
         val filteredAbs = arrowFilter.currentAngle() ?: GeoMath.normalizeAngleDegrees(rawRelative)
         val relative = GeoMath.shortestAngleDeltaDegrees(0f, filteredAbs)
+        val confidence = confidenceEstimator.currentSnapshot()
         return GuidanceState(
             phase = phase,
             relativeArrowDeg = relative,
@@ -125,7 +129,9 @@ class GuidanceEngine(
             floorDeltaToTarget = floorDeltaToTarget,
             isCompassLowAccuracy = isCompassLowAccuracy,
             hasWeakGpsSignal = hasWeakGpsSignal,
-            canEnterPhase2Manually = phase == GuidancePhase.PHASE1_GPS_TO_ANCHOR && hasFootprint
+            canEnterPhase2Manually = phase == GuidancePhase.PHASE1_GPS_TO_ANCHOR && hasFootprint,
+            confidenceScore = confidence.score,
+            confidenceLevel = confidence.level
         )
     }
 
@@ -192,6 +198,7 @@ class GuidanceEngine(
         phase = GuidancePhase.PHASE2_FOOTPRINT
         isTargetBearingLocked = false
         hasWeakGpsSignal = false
+        confidenceEstimator.reset()
         currentX = reversedPolyline.first().x
         currentY = reversedPolyline.first().y
         if (currentPressureHpa != null && info.hasBarometer) {
@@ -211,7 +218,13 @@ class GuidanceEngine(
         val rad = Math.toRadians(latestAzimuthDeg.toDouble())
         currentX += (stepLengthM * sin(rad)).toFloat()
         currentY += (stepLengthM * cos(rad)).toFloat()
+        confidenceEstimator.onStep(stepLengthM, latestAzimuthDeg)
         recomputePhase2Guidance()
+        return currentState()
+    }
+
+    fun onMagneticSpike(): GuidanceState {
+        confidenceEstimator.onMagneticSpike()
         return currentState()
     }
 

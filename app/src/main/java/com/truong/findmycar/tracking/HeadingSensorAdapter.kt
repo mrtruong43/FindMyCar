@@ -32,16 +32,20 @@ class HeadingSensorAdapter(
     private val onHeadingUpdated: (HeadingSensorSnapshot) -> Unit
 ) {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val gameRotationSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
     private val rotationSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private val linearAccelSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
     private val proximitySensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
     private val magneticSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
     private val estimator = HeadingEstimator()
+    private val orientationFusion = OrientationFusion()
     private val rotationMatrix = FloatArray(9)
+    private val gameRotationMatrix = FloatArray(9)
 
     private var hasRotationMatrix = false
     private var latestTopUp = 0f
+    private var latestMagAzimuthDeg: Float? = null
     private var lastValidHandHeldHeading: Float? = null
     private var isProximityCovered = false
     private var hasMagneticInterference = false
@@ -55,47 +59,50 @@ class HeadingSensorAdapter(
     private val listener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
             when (event.sensor.type) {
-                Sensor.TYPE_ROTATION_VECTOR -> {
-                    SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                    hasRotationMatrix = true
-                    latestTopUp = rotationMatrix[7]
+                Sensor.TYPE_GAME_ROTATION_VECTOR -> {
+                    SensorManager.getRotationMatrixFromVector(gameRotationMatrix, event.values)
+                    if (!hasRotationMatrix) {
+                        System.arraycopy(gameRotationMatrix, 0, rotationMatrix, 0, 9)
+                        hasRotationMatrix = true
+                    }
+                    latestTopUp = gameRotationMatrix[7]
 
                     if (isProximityCovered) {
-                        // Phone-call proximity hold: freeze last valid hand-held heading
-                        lastValidHandHeldHeading?.let { held ->
-                            updateSnapshot(
-                                HeadingSensorSnapshot(
-                                    headingDeg = held,
-                                    mode = HeadingMode.HAND_HELD,
-                                    pcaRatio = currentSnapshot.pcaRatio
-                                )
-                            )
-                        }
+                        holdProximityHeading()
                         return
                     }
 
-                    val (azimuthDeg, postureBaseAlpha) = computeMultiPostureAzimuth(rotationMatrix)
-                    val effectiveBaseAlpha = if (hasMagneticInterference) {
-                        MAGNETIC_INTERFERENCE_ALPHA
-                    } else {
-                        postureBaseAlpha
-                    }
+                    val (gameAzimuthDeg, postureBaseAlpha) = computeMultiPostureAzimuth(gameRotationMatrix)
+                    val fusedAzimuthDeg = orientationFusion.update(
+                        gameAzimuthDeg = gameAzimuthDeg,
+                        magAzimuthDeg = latestMagAzimuthDeg,
+                        hasMagneticInterference = hasMagneticInterference,
+                        timestampMs = System.currentTimeMillis()
+                    )
+                    emitHandHeldHeading(fusedAzimuthDeg, postureBaseAlpha)
+                }
 
-                    if (isHandHeldPosture()) {
-                        val est = estimator.updateHandHeldAzimuth(azimuthDeg, effectiveBaseAlpha)
-                        lastValidHandHeldHeading = est.headingDeg
-                        updateSnapshot(
-                            HeadingSensorSnapshot(
-                                headingDeg = est.headingDeg,
-                                mode = HeadingMode.HAND_HELD,
-                                pcaRatio = currentSnapshot.pcaRatio
-                            )
-                        )
+                Sensor.TYPE_ROTATION_VECTOR -> {
+                    SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                    hasRotationMatrix = true
+                    val (magAzimuthDeg, postureBaseAlpha) = computeMultiPostureAzimuth(rotationMatrix)
+                    latestMagAzimuthDeg = magAzimuthDeg
+
+                    // Fallback only if hardware lacks TYPE_GAME_ROTATION_VECTOR
+                    if (gameRotationSensor == null) {
+                        latestTopUp = rotationMatrix[7]
+                        if (isProximityCovered) {
+                            holdProximityHeading()
+                            return
+                        }
+                        emitHandHeldHeading(magAzimuthDeg, postureBaseAlpha)
                     }
                 }
 
                 Sensor.TYPE_LINEAR_ACCELERATION -> {
                     if (!hasRotationMatrix || event.values.size < 3 || isProximityCovered) return
+                    // Freeze PCA updates while turning fast
+                    if (orientationFusion.isTurningFast) return
                     val lx = event.values[0]
                     val ly = event.values[1]
                     val lz = event.values[2]
@@ -141,6 +148,37 @@ class HeadingSensorAdapter(
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
     }
 
+    private fun holdProximityHeading() {
+        lastValidHandHeldHeading?.let { held ->
+            updateSnapshot(
+                HeadingSensorSnapshot(
+                    headingDeg = held,
+                    mode = HeadingMode.HAND_HELD,
+                    pcaRatio = currentSnapshot.pcaRatio
+                )
+            )
+        }
+    }
+
+    private fun emitHandHeldHeading(azimuthDeg: Float, postureBaseAlpha: Float) {
+        val effectiveBaseAlpha = if (hasMagneticInterference) {
+            MAGNETIC_INTERFERENCE_ALPHA
+        } else {
+            postureBaseAlpha
+        }
+        if (isHandHeldPosture()) {
+            val est = estimator.updateHandHeldAzimuth(azimuthDeg, effectiveBaseAlpha)
+            lastValidHandHeldHeading = est.headingDeg
+            updateSnapshot(
+                HeadingSensorSnapshot(
+                    headingDeg = est.headingDeg,
+                    mode = HeadingMode.HAND_HELD,
+                    pcaRatio = currentSnapshot.pcaRatio
+                )
+            )
+        }
+    }
+
     private fun isHandHeldPosture(): Boolean {
         // Allows natural arm back-swing while walking (topUp >= -0.50f)
         return latestTopUp >= -0.50f
@@ -166,11 +204,13 @@ class HeadingSensorAdapter(
     }
 
     private fun registerWithDelay(delayUs: Int) {
+        gameRotationSensor?.let { sensorManager.registerListener(listener, it, delayUs) }
         rotationSensor?.let { sensorManager.registerListener(listener, it, delayUs) }
         linearAccelSensor?.let { sensorManager.registerListener(listener, it, delayUs) }
         proximitySensor?.let { sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_NORMAL) }
         magneticSensor?.let { sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_NORMAL) }
-        registered = rotationSensor != null ||
+        registered = gameRotationSensor != null ||
+            rotationSensor != null ||
             linearAccelSensor != null ||
             proximitySensor != null ||
             magneticSensor != null

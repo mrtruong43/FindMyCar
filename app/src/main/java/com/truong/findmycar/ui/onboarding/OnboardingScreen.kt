@@ -98,9 +98,6 @@ fun OnboardingScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) {
         refreshStates()
-        if (Permissions.hasActivityRecognition(context)) {
-            ActivityTransitionManager.register(context)
-        }
     }
 
     Scaffold(

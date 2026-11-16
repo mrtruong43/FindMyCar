@@ -350,12 +350,12 @@ fun HomeScreen(
             ) {
                 // 1. Top Header (wrapContentHeight)
                 HomeTopHeader(
-                    isAutoDetectActive = uiState.autoDetectEnabled && !hasMissingAutoDetectPerm,
+                    isAutoDetectActive = hasForegroundLocation,
                     onOpenHistory = onOpenHistory,
                     onOpenSettings = onOpenSettings
                 )
 
-                if (!isCompactHeight && uiState.autoDetectEnabled && hasMissingAutoDetectPerm) {
+                if (!isCompactHeight && !hasForegroundLocation) {
                     MissingPermissionBanner(
                         onGrantClick = { Permissions.openAppSettings(context) }
                     )
@@ -823,20 +823,12 @@ private fun SensorsBentoCard(
 
             Surface(
                 shape = CircleShape,
-                color = if (autoDetectEnabled) {
-                    MintAccent.copy(alpha = 0.14f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                }
+                color = MintAccent.copy(alpha = 0.14f)
             ) {
                 Text(
-                    text = if (autoDetectEnabled) {
-                        stringResource(R.string.home_auto_detect_on)
-                    } else {
-                        stringResource(R.string.home_auto_detect_off)
-                    },
+                    text = stringResource(R.string.home_manual_mode_label),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (autoDetectEnabled) MintAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MintAccent,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)

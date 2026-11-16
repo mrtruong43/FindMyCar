@@ -56,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -74,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.truong.findmycar.R
+import com.truong.findmycar.guidance.ConfidenceLevel
 import com.truong.findmycar.guidance.GuidancePhase
 import com.truong.findmycar.ui.components.FloorBadge
 import com.truong.findmycar.ui.components.HologramStageMode
@@ -246,16 +248,18 @@ fun FindCarScreen(
 
                         val isVeryClose = guidance.phase == GuidancePhase.VERY_CLOSE ||
                             (guidance.distanceMeters != null && guidance.distanceMeters < 10f)
+                        val isCoarseMode = guidance.confidenceLevel == ConfidenceLevel.LOW
                         ScooterHologramStage(
                             mode = HologramStageMode.GUIDING_TO_VEHICLE,
                             vehicleType = uiState.vehicleType,
                             relativeArrowDeg = guidance.relativeArrowDeg,
                             userHeadingDeg = uiState.userHeadingDeg,
                             isVeryClose = isVeryClose,
-                            isLowAccuracy = guidance.isCompassLowAccuracy,
+                            isLowAccuracy = guidance.isCompassLowAccuracy || isCoarseMode,
                             interactiveRotationEnabled = false,
                             modifier = Modifier
                                 .size(compassSize)
+                                .alpha(if (isCoarseMode) 0.65f else 1f)
                                 .semantics { contentDescription = compassA11y }
                         )
                     }
@@ -304,6 +308,15 @@ fun FindCarScreen(
                                         fontWeight = FontWeight.SemiBold,
                                         color = MintAccent
                                     )
+                                } else if (distInt != null && guidance.confidenceLevel == ConfidenceLevel.LOW) {
+                                    val lowBound = ((distInt * 0.75f).roundToInt()).coerceAtLeast(5)
+                                    val highBound = ((distInt * 1.35f).roundToInt()).coerceAtLeast(lowBound + 10)
+                                    Text(
+                                        text = stringResource(R.string.find_coarse_distance_range, lowBound, highBound),
+                                        fontSize = if (isCompactHeight) 24.sp else 28.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = com.truong.findmycar.ui.theme.WarningAmber
+                                    )
                                 } else if (distInt != null) {
                                     Row(
                                         verticalAlignment = Alignment.Bottom,
@@ -350,6 +363,15 @@ fun FindCarScreen(
                                         }
                                     )
                                 }
+                            }
+
+                            if (guidance.confidenceLevel == ConfidenceLevel.LOW) {
+                                Text(
+                                    text = stringResource(R.string.find_low_confidence_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = com.truong.findmycar.ui.theme.WarningAmber,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
 
                             if (guidance.canEnterPhase2Manually && !isCompactHeight) {

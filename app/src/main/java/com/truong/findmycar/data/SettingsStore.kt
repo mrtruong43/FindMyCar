@@ -120,7 +120,7 @@ class SettingsStore(private val context: Context) {
     companion object {
         const val DEFAULT_USER_HEIGHT_M = 1.65f
         const val DEFAULT_FLOOR_HEIGHT_M = 3.2f
-        const val DEFAULT_AUTO_DETECT_ENABLED = true
+        const val DEFAULT_AUTO_DETECT_ENABLED = false
         const val DEFAULT_HAPTIC_FEEDBACK_ENABLED = true
     }
 }
